@@ -1,0 +1,26 @@
+data;tipo;conta;conta_destino;valor;categoria;favorecido;descricao;tags
+2025-08-25;income;Conta Corrente;;5000.00;Salário;Empresa XYZ;Salário Agosto;salario
+2025-08-26;expense;Conta Corrente;;250.45;Alimentação;Supermercado BH;Compras do mês;mercado
+2025-08-26;expense;Conta Corrente;;23.90;Transporte;UBER TRIP;Corrida até o escritório;uber
+2025-08-27;expense;Conta Corrente;;1500.00;Moradia (Aluguel);Imobiliária Sol;Aluguel do mês;aluguel
+2025-08-27;expense;Cartão de Crédito;;34.90;Lazer;Netflix;Assinatura mensal;assinatura,streaming
+2025-08-28;expense;Conta Corrente;;78.50;Saúde;Drogaria Minas;Remédios e itens de higiene;farmacia
+2025-08-28;income;Conta Corrente;;120.00;Reembolso;Empresa XYZ;Reembolso de táxi;reembolso
+2025-08-29;transfer;Conta Corrente;Poupança;400.00;;Transferência Interna;Aporte para poupança;aporte,poupanca
+2025-08-30;expense;Conta Corrente;;89.90;Educação;Livraria Cultura;Compra de livros;livros
+2025-08-30;expense;Conta Corrente;;210.00;Transporte;Posto Shell;Combustível;combustivel
+2025-09-05;expense;Conta Corrente;;350.00;Moradia (Condomínio);Condomínio Solar;Condomínio (futuro);condominio
+2025-08-30;expense;Cartão de Crédito;;65.00;Alimentação;Restaurante Sabor;Almoço de trabalho;almoco
+2025-08-31;income;Poupança;;18.55;Rendimentos;Banco ABC;Rendimento da poupança;juros
+2025-08-27;expense;Conta Corrente;;23.90;Transporte;UBER BR*TRIP;Corrida curta (possível duplicado);uber
+2025-08-25;expense;Conta Corrente;;250.45;Alimentação;Supermercado BH - Unidade 2;Compras (possível duplicado);mercado
+2025-08-20;transfer;Conta Corrente;Cartão de Crédito;1500.00;;Pagamento de Fatura;Pagamento da fatura do cartão;fatura,cartao
+2025-08-31;expense;Conta Corrente;;420.00;Saúde;Unimed;Plano de saúde;assinatura,saude
+2025-08-15;expense;Cartão de Crédito;;299.00;Educação;Udemy;Curso online;curso
+2025-09-02;income;Conta Corrente;;5000.00;Salário;Empresa XYZ;Salário Setembro (futuro);salario
+2025-08-29;expense;Conta Corrente;;12.00;;Estacionamento Centro;Estadia rápida;estacionamento
+2025-08-29;expense;Cartão de Crédito;;21.90;Lazer;Spotify;Assinatura de música;assinatura,musica
+2025-08-29;income;Conta Corrente;;45.00;Reembolso;Empresa XYZ;Reembolso refeição;reembolso
+2025-08-31;income;Poupança;;35.70;Rendimentos;CDB Banco XYZ;Rendimento mensal CDB;juros,investimento
+2025-09-01;expense;Conta Corrente;;325.30;Alimentação;Pão de Açúcar;Compras da semana;mercado
+2025-08-28;expense;Conta Corrente;;58.00;Transporte;UBER DO BR;Corrida curta (payee similar);uber

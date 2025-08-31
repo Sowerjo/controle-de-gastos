@@ -1,0 +1,10 @@
+{
+  "name": "finance-app",
+  "private": true,
+  "scripts": {
+    "build:fe": "npm --prefix frontend run build",
+  "pack": "node scripts/pack.cjs",
+  "build": "npm run build:fe && npm run pack",
+  "clean": "node scripts/clean.cjs"
+  }
+}

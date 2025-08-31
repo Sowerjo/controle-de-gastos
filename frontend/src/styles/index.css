@@ -1,0 +1,81 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Design Tokens */
+:root {
+  --bg: #0B0F1A;
+  --surf-1: #0F172A;
+  --surf-2: #131C2F;
+  --text: #E5E7EB;
+  --text-dim: #94A3B8;
+  --accent: #22D3EE;
+  --accent-2: #E879F9;
+  --pos: #22C55E;
+  --neg: #F43F5E;
+  --warn: #F59E0B;
+  --brd: rgba(255,255,255,.06);
+
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 20px;
+
+  --shadow-1: 0 4px 16px rgba(2, 6, 23, .5);
+  --shadow-glow: 0 0 24px rgba(34, 211, 238, .25);
+
+  --blur: 12px;
+  --elev: 1;
+}
+
+html {
+  color-scheme: dark;
+  background: var(--bg);
+}
+
+/* Fonts: Inter + Sora loaded via index.html */
+body {
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans,
+    Arial, Helvetica, Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.heading {
+  font-family: Sora, Inter, ui-sans-serif, system-ui;
+}
+
+.tnum { font-feature-settings: "tnum" 1; }
+
+/* Primitives */
+.card {
+  background: color-mix(in oklab, var(--surf-1) 85%, transparent);
+  border: 1px solid var(--brd);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-1);
+}
+.surface {
+  background: var(--surf-1);
+  border: 1px solid var(--brd);
+}
+.surface-2 {
+  background: color-mix(in oklab, var(--surf-2) 90%, transparent);
+  border: 1px solid var(--brd);
+  backdrop-filter: blur(var(--blur));
+}
+.btn-primary {
+  @apply inline-flex items-center gap-2 rounded-[12px] px-4 py-2;
+  color: #0b0f1a;
+  background-image: linear-gradient(135deg, var(--accent), var(--accent-2));
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  box-shadow: var(--shadow-glow);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 24px rgba(232,121,249,.25); }
+
+.input {
+  background: var(--surf-2);
+  border: 1px solid var(--brd);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+}

@@ -1,0 +1,15 @@
+RewriteEngine On
+
+# Ensure PHP receives the Authorization header (common on shared hosts)
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+# Fallback method used by some Apache setups
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+# If the request is for index.php itself, serve it
+RewriteRule ^index\.php$ - [L]
+
+# Otherwise, if it's not a real file/dir, route to index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]

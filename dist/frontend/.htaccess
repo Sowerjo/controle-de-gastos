@@ -1,0 +1,12 @@
+RewriteEngine On
+
+# Route API calls directly to API front controller with query path (works even if /api/.htaccess is ignored)
+RewriteRule ^api/(.*)$ /api/index.php?path=/api/$1 [QSA,L]
+
+# Serve existing files/directories as-is
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Fallback for SPA routes to index.html
+RewriteRule . /index.html [L]
