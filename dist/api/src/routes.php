@@ -197,8 +197,12 @@ $router->add('DELETE', '/api/v1/accounts', function(){ Middleware::requireAuth()
 $router->add('GET', '/api/v1/transactions', function(){ Middleware::requireAuth();
     $id=$GLOBALS['auth_user_id'];$pdo=DB::conn();
     $q='SELECT t.id, t.type as tipo, t.amount as valor, t.date as data, t.description as descricao, t.category_id as categoriaId, t.account_id as contaId, t.status as status FROM transactions t WHERE t.user_id=?'; $args=[$id];
-    if(isset($_GET['from'])) { $q.=' AND t.date>=?'; $args[]=$_GET['from']; }
-    if(isset($_GET['to']))   { $q.=' AND t.date<=?'; $args[]=$_GET['to']; }
+    $normalize=function($s){ $t=trim((string)$s); if($t==='') return $t; // yyyy/mm/dd -> yyyy-mm-dd
+        if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)){ return sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
+        if(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)){ $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; return sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
+        return $t; };
+    if(isset($_GET['from'])) { $q.=' AND t.date>=?'; $args[]=$normalize($_GET['from']); }
+    if(isset($_GET['to']))   { $q.=' AND t.date<=?'; $args[]=$normalize($_GET['to']); }
     if(isset($_GET['type'])) { $q.=' AND t.type=?'; $args[]=$_GET['type']; }
     if(isset($_GET['accountId'])) { $q.=' AND t.account_id=?'; $args[]=(int)$_GET['accountId']; }
     if(isset($_GET['categoryId'])) { $q.=' AND t.category_id=?'; $args[]=(int)$_GET['categoryId']; }
@@ -215,6 +219,14 @@ $router->add('POST', '/api/v1/transactions', function(){ Middleware::requireAuth
     if ($type && ($type==='receita' || $type==='despesa')) { $type = strtoupper($type); }
     $amount=$in['amount']??($in['valor']??null); if ($amount!==null) $amount = (float)$amount;
     $date=$in['date']??($in['data']??null);
+    // Normalize date: accept DD/MM/YYYY or YYYY/MM/DD
+    if($date){
+        $t=trim((string)$date);
+        if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)) { $date=sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
+        elseif(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)) { $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; $date=sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
+        // basic validation
+        if(!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$date,$mm) || !checkdate((int)$mm[2],(int)$mm[3],(int)$mm[1])) { json(['error'=>['message'=>'Data inválida']],422); }
+    }
     $desc=$in['description']??($in['descricao']??null);
     $cat=$in['categoryId']??($in['categoriaId']??null);
     $acc=$in['accountId']??($in['contaId']??null);
@@ -264,6 +276,50 @@ $router->add('DELETE', '/api/v1/transactions', function(){ Middleware::requireAu
     json(['data'=>['ok'=>true]]);
 });
 
+// Update a transaction
+$router->add('PUT', '/api/v1/transactions', function(){ Middleware::requireAuth();
+    $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn();
+    $in=json_decode(file_get_contents('php://input'),true)?:[];
+    $tid=(int)($in['id']??0); if(!$tid) json(['error'=>['message'=>'ID requerido']],422);
+    // Accept EN/PT aliases
+    $fields=[]; $args=[];
+    // account
+    if(array_key_exists('accountId',$in) || array_key_exists('contaId',$in)) { $fields[]='account_id=?'; $args[]=(int)($in['accountId']??$in['contaId']); }
+    // type
+    if(array_key_exists('type',$in) || array_key_exists('tipo',$in)) { $v=$in['type']??$in['tipo']; if($v==='receita'||$v==='despesa'){ $v=strtoupper($v);} if(!in_array($v,['RECEITA','DESPESA'])) json(['error'=>['message'=>'type inválido']],422); $fields[]='type=?'; $args[]=$v; }
+    // amount
+    if(array_key_exists('amount',$in) || array_key_exists('valor',$in)) { $amt=(float)($in['amount']??$in['valor']); $fields[]='amount=?'; $args[]=abs($amt); }
+    // date
+    if(array_key_exists('date',$in) || array_key_exists('data',$in)) { $d=$in['date']??$in['data'];
+        if($d){ $t=trim((string)$d);
+            if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)) { $d=sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
+            elseif(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)) { $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; $d=sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
+            if(!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$d,$mm) || !checkdate((int)$mm[2],(int)$mm[3],(int)$mm[1])) { json(['error'=>['message'=>'Data inválida']],422); }
+        }
+        $fields[]='date=?'; $args[]=$d; }
+    // description
+    if(array_key_exists('description',$in) || array_key_exists('descricao',$in)) { $desc=$in['description']??$in['descricao']; $fields[]='description=?'; $args[]=$desc; }
+    // category
+    if(array_key_exists('categoryId',$in) || array_key_exists('categoriaId',$in)) { $cid=$in['categoryId']??$in['categoriaId']; $fields[]='category_id=?'; $args[]=$cid!==''? (int)$cid : null; }
+    // payee by id or name
+    $payeeId=null;
+    if(array_key_exists('payeeId',$in)) { $payeeId=$in['payeeId']!==''? (int)$in['payeeId'] : null; }
+    $payeeName=trim($in['payeeName']??'');
+    if(!$payeeId && $payeeName!=='') {
+        // upsert payee
+        $st=$pdo->prepare('SELECT id FROM payees WHERE user_id=? AND name=?'); $st->execute([$uid,$payeeName]); $row=$st->fetch();
+        if($row){ $payeeId=(int)$row['id']; } else { $pdo->prepare('INSERT INTO payees (user_id,name,created_at) VALUES (?,?,NOW())')->execute([$uid,$payeeName]); $payeeId=(int)$pdo->lastInsertId(); }
+    }
+    if($payeeId!==null) { $fields[]='payee_id=?'; $args[]=$payeeId; }
+    // status
+    if(array_key_exists('status',$in)) { $st=strtoupper($in['status']); if(!in_array($st,['PENDING','CLEARED','RECONCILED'])) json(['error'=>['message'=>'status inválido']],422); $fields[]='status=?'; $args[]=$st; }
+    if(!count($fields)) json(['error'=>['message'=>'Nada a atualizar']],422);
+    $args[]=$tid; $args[]=$uid;
+    $sql='UPDATE transactions SET '.implode(',', $fields).' WHERE id=? AND user_id=?';
+    $pdo->prepare($sql)->execute($args);
+    json(['data'=>['ok'=>true]]);
+});
+
 // Transfers (create paired transactions)
 $router->add('POST', '/api/v1/transfers', function(){ Middleware::requireAuth();
     $in=json_decode(file_get_contents('php://input'),true)?:[]; $uid=$GLOBALS['auth_user_id'];
@@ -271,6 +327,11 @@ $router->add('POST', '/api/v1/transfers', function(){ Middleware::requireAuth();
     $to=$in['toAccountId']??($in['contaDestinoId']??null);
     $amount=$in['amount']??($in['valor']??null); if ($amount!==null) $amount=(float)$amount;
     $date=$in['date']??($in['data']??null);
+    if($date){ $t=trim((string)$date);
+        if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)) { $date=sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
+        elseif(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)) { $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; $date=sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
+        if(!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$date,$mm) || !checkdate((int)$mm[2],(int)$mm[3],(int)$mm[1])) { json(['error'=>['message'=>'Data inválida']],422); }
+    }
     $desc=$in['description']??($in['descricao']??'Transferência');
     if(!$from||!$to||!$amount||!$date||$from===$to) json(['error'=>['message'=>'Dados inválidos']],422);
     $pdo=DB::conn();
@@ -332,10 +393,32 @@ $router->add('PATCH', '/api/v1/transactions/status', function(){ Middleware::req
 $router->add('POST', '/api/v1/reconcile', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $ids=$in['ids']??[]; if(!is_array($ids)||!count($ids)) json(['error'=>['message'=>'ids requeridos']],422); $ph=str_repeat('?,',count($ids)); $ph=rtrim($ph,','); $args=array_merge(['RECONCILED'],$ids,[$uid]); $pdo->prepare("UPDATE transactions SET status=? WHERE id IN ($ph) AND user_id=?")->execute($args); json(['data'=>['ok'=>true]]); });
 
 // CSV Export
-$router->add('GET', '/api/v1/transactions/export-csv', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); header('Content-Type: text/csv; charset=utf-8'); header('Content-Disposition: attachment; filename=transacoes.csv'); $out=fopen('php://output','w'); fputcsv($out,['date','description','type','amount','account_id','category_id','payee_id','status']); $q='SELECT date,description,type,amount,account_id,category_id,payee_id,status FROM transactions WHERE user_id=?'; $args=[$uid]; if(isset($_GET['from'])){$q.=' AND date>=?';$args[]=$_GET['from'];} if(isset($_GET['to'])){$q.=' AND date<=?';$args[]=$_GET['to'];} if(isset($_GET['accountId'])){$q.=' AND account_id=?';$args[]=(int)$_GET['accountId'];} $q.=' ORDER BY date,id'; $st=$pdo->prepare($q); $st->execute($args); while($r=$st->fetch(PDO::FETCH_NUM)){ fputcsv($out,$r); } fclose($out); });
+$router->add('GET', '/api/v1/transactions/export-csv', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); header('Content-Type: text/csv; charset=utf-8'); header('Content-Disposition: attachment; filename=transacoes.csv'); $out=fopen('php://output','w'); fputcsv($out,['date','description','type','amount','account_id','category_id','payee_id','status']); $q='SELECT date,description,type,amount,account_id,category_id,payee_id,status FROM transactions WHERE user_id=?'; $args=[$uid]; $normalize=function($s){ $t=trim((string)$s); if($t==='') return $t; if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)){ return sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); } if(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)){ $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; return sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); } return $t; }; if(isset($_GET['from'])){$q.=' AND date>=?';$args[]=$normalize($_GET['from']);} if(isset($_GET['to'])){$q.=' AND date<=?';$args[]=$normalize($_GET['to']);} if(isset($_GET['accountId'])){$q.=' AND account_id=?';$args[]=(int)$_GET['accountId'];} $q.=' ORDER BY date,id'; $st=$pdo->prepare($q); $st->execute($args); while($r=$st->fetch(PDO::FETCH_NUM)){ fputcsv($out,$r); } fclose($out); });
 
 // CSV Import
-$router->add('POST', '/api/v1/transactions/import-csv', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); if(!isset($_FILES['file'])) json(['error'=>['message'=>'Arquivo requerido']],422); $up=$_FILES['file']; if($up['error']!==UPLOAD_ERR_OK) json(['error'=>['message'=>'Falha no upload']],400); $fh=fopen($up['tmp_name'],'r'); if(!$fh) json(['error'=>['message'=>'Não foi possível ler arquivo']],400); $header=fgetcsv($fh); $map=array_flip(array_map('strtolower',$header)); $ins=0;$skip=0; while(($row=fgetcsv($fh))!==false){ $get=function($key) use ($map,$row){ $k=strtolower($key); return isset($map[$k])? $row[$map[$k]]: null; }; $date=$get('date'); $desc=$get('description'); $type=strtoupper($get('type')?:''); $amount=(float)($get('amount')?:0); $accountId=(int)($get('account_id')?:0); $categoryId=$get('category_id')?:null; $payeeId=$get('payee_id')?:null; $status=$get('status')?:'CLEARED'; if(!$date||!$type||!$amount||!$accountId){ $skip++; continue; } $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,payee_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$accountId,$type,$amount,$date,$desc,$categoryId,$payeeId,$status]); $ins++; } fclose($fh); json(['data'=>['inserted'=>$ins,'skipped'=>$skip]]); });
+$router->add('POST', '/api/v1/transactions/import-csv', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); if(!isset($_FILES['file'])) json(['error'=>['message'=>'Arquivo requerido']],422); $up=$_FILES['file']; if($up['error']!==UPLOAD_ERR_OK) json(['error'=>['message'=>'Falha no upload']],400); $fh=fopen($up['tmp_name'],'r'); if(!$fh) json(['error'=>['message'=>'Não foi possível ler arquivo']],400); $header=fgetcsv($fh); $map=array_flip(array_map('strtolower',$header)); $ins=0;$skip=0; 
+    $normDate=function($s){ $t=trim((string)$s); if($t==='') return null; 
+        $valid=function($y,$m,$d){ $yy=(int)$y; $mm=(int)$m; $dd=(int)$d; if($yy<1900||$mm<1||$mm>12||$dd<1||$dd>31) return false; return checkdate($mm,$dd,$yy); };
+        if(preg_match('/^(\d{4})-(\d{1,2})-(\d{1,2})$/',$t,$m)){
+            $y=$m[1]; $mm=str_pad($m[2],2,'0',STR_PAD_LEFT); $dd=str_pad($m[3],2,'0',STR_PAD_LEFT);
+            if(!$valid($y,$mm,$dd)) return null; return "$y-$mm-$dd"; }
+        if(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)){
+            $dd=str_pad($m[1],2,'0',STR_PAD_LEFT); $mm=str_pad($m[2],2,'0',STR_PAD_LEFT); $yy=strlen($m[3])===2? ('20'.$m[3]):$m[3];
+            if(!$valid($yy,$mm,$dd)) return null; return "$yy-$mm-$dd"; }
+        if(preg_match('/^(\d{1,2})-(\d{1,2})-(\d{2,4})$/',$t,$m)){
+            $dd=str_pad($m[1],2,'0',STR_PAD_LEFT); $mm=str_pad($m[2],2,'0',STR_PAD_LEFT); $yy=strlen($m[3])===2? ('20'.$m[3]):$m[3];
+            if(!$valid($yy,$mm,$dd)) return null; return "$yy-$mm-$dd"; }
+        return null; };
+    $normAmount=function($s){ $v=trim((string)$s); if($v==='') return 0.0; $neg=false; if(preg_match('/^\(.*\)$/',$v)){ $neg=true; $v=substr($v,1,-1);} if(strpos($v,'-')===0){ $neg=true; $v=substr($v,1);} // comma decimal?
+        if(preg_match('/^\d{1,3}(\.\d{3})*,\d{1,2}$/',$v) || (strpos($v,',')!==false && strpos($v,'.')===false)){ $v=str_replace('.','',$v); $v=str_replace(',', '.', $v); } else { $v=str_replace(',', '', $v); }
+        $n=(float)$v; return $neg? -$n: $n; };
+    $normType=function($v,$amt){ $t=strtolower(trim((string)$v)); if($t==='income'||$t==='receita'||$t==='entrada') return 'RECEITA'; if($t==='expense'||$t==='despesa'||$t==='saida'||$t==='saída') return 'DESPESA'; if($t==='transfer'||$t==='transferencia'||$t==='transferência') return 'TRANSFER'; if($t==='') { return $amt<0? 'DESPESA':'RECEITA'; } return strtoupper($t); };
+    while(($row=fgetcsv($fh))!==false){ $get=function($key) use ($map,$row){ $k=strtolower($key); return isset($map[$k])? $row[$map[$k]]: null; }; $rawDate=$get('date'); $desc=$get('description'); $rawType=$get('type'); $rawAmount=$get('amount'); $accountId=(int)($get('account_id')?:0); $categoryId=$get('category_id')?:null; $payeeId=$get('payee_id')?:null; $status=$get('status')?:'CLEARED'; 
+        $date=$normDate($rawDate); $amt=$normAmount($rawAmount); $type=$normType($rawType,$amt);
+        if(!$date||!$type||!$accountId||$amt==0){ $skip++; continue; }
+        $amount=abs($amt); // store positive; type defines sign in reports
+        $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,payee_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$accountId,$type,$amount,$date,$desc,$categoryId,$payeeId,$status]); $ins++; }
+    fclose($fh); json(['data'=>['inserted'=>$ins,'skipped'=>$skip]]); });
 
 // Reports
 $router->add('GET', '/api/v1/reports/by-category', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $from=$_GET['from']??date('Y-m-01'); $to=$_GET['to']??date('Y-m-t'); $q='SELECT c.name, t.type, SUM(t.amount) total FROM transactions t LEFT JOIN categories c ON c.id=t.category_id WHERE t.user_id=? AND t.date BETWEEN ? AND ? GROUP BY c.name, t.type ORDER BY c.name'; $st=$pdo->prepare($q); $st->execute([$uid,$from,$to]); json(['data'=>$st->fetchAll()]); });
