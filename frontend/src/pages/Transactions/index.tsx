@@ -53,13 +53,35 @@ export default function Transactions() {
     })();
   }, []);
 
-  // When URL query changes, sync filters (from/to/accountId)
+  // Listen for new transaction events to refresh the list
+  React.useEffect(() => {
+    const handleTxCreated = () => {
+      setItems([]);
+      setPage(1);
+      setHasMore(true);
+      fetchPage(1, true);
+    };
+
+    window.addEventListener('tx-created', handleTxCreated);
+    return () => window.removeEventListener('tx-created', handleTxCreated);
+  }, [period.from, period.to, accountId, tipo, categoriaId, q]);
+
+  // When URL query changes, sync filters (from/to/accountId/categoryId)
   React.useEffect(() => {
     const from = search.get('from');
     const to = search.get('to');
     const aid = search.get('accountId');
-    if (from && to) setPeriod({ from, to });
-    if (aid) setAccountId(Number(aid));
+    const cid = search.get('categoryId');
+    
+    if (from && to) {
+      setPeriod({ from, to });
+    }
+    if (aid) {
+      setAccountId(Number(aid));
+    }
+    if (cid) {
+      setCategoriaId(Number(cid));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search.toString()]);
 
@@ -183,22 +205,46 @@ export default function Transactions() {
   }
 
   function changeMonth(offset: number) {
-    const d = new Date(period.from);
-    d.setMonth(d.getMonth() + offset);
-    setPeriod(monthRange(d));
+    // Parse the current period date more reliably
+    const currentDate = new Date(period.from + 'T00:00:00');
+    
+    // Calculate new month/year
+    const newYear = currentDate.getFullYear();
+    const newMonth = currentDate.getMonth() + offset;
+    
+    // Create new date with proper month/year handling
+    const targetDate = new Date(newYear, newMonth, 1);
+    
+    setPeriod(monthRange(targetDate));
   }
 
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-lg font-semibold">Transações</h1>
-        <div className="flex gap-2">
-          <button className="px-2 py-1 rounded border border-white/10" onClick={() => changeMonth(-1)}>◀</button>
-          <div className="px-2 py-1 text-sm text-[color:var(--text-dim)]">
-            {new Date(period.from).toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
-          </div>
-          <button className="px-2 py-1 rounded border border-white/10" onClick={() => changeMonth(1)}>▶</button>
-        </div>
+        <div className="flex gap-2 items-center">
+           <button className="px-2 py-1 rounded border border-white/10 hover:bg-white/5" onClick={() => changeMonth(-1)}>◀</button>
+           <input 
+             type="month" 
+             className="input px-2 py-1 text-sm min-w-[140px]" 
+             value={period.from.slice(0, 7)} 
+             onChange={(e) => {
+               if (e.target.value) {
+                 const [year, month] = e.target.value.split('-');
+                 const targetDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+                 setPeriod(monthRange(targetDate));
+               }
+             }}
+           />
+           <button className="px-2 py-1 rounded border border-white/10 hover:bg-white/5" onClick={() => changeMonth(1)}>▶</button>
+           <button 
+             className="px-2 py-1 rounded border border-white/10 hover:bg-white/5 text-xs" 
+             onClick={() => setPeriod(monthRange())}
+             title="Mês atual"
+           >
+             Hoje
+           </button>
+         </div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1">
@@ -215,6 +261,20 @@ export default function Transactions() {
           <option value="">Todas categorias</option>
           {categories.map((c:any)=> (<option key={c.id} value={c.id}>{c.name}</option>))}
         </select>
+        {(accountId || tipo !== 'all' || categoriaId || q) && (
+          <button 
+            className="px-3 py-2 rounded border border-white/10 hover:bg-white/5 text-xs whitespace-nowrap"
+            onClick={() => {
+              setAccountId('');
+              setTipo('all');
+              setCategoriaId('');
+              setQ('');
+            }}
+            title="Limpar filtros"
+          >
+            Limpar
+          </button>
+        )}
         <input className="input px-3 py-2 min-w-[180px]" placeholder="Buscar" value={q} onChange={(e)=>setQ(e.target.value)} />
       </div>
 

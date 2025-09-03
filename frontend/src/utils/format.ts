@@ -10,7 +10,15 @@ export const fmtDate = (iso: string) => {
 };
 
 export function monthRange(date = new Date()) {
-  const from = new Date(date.getFullYear(), date.getMonth(), 1).toISOString().slice(0, 10);
-  const to = new Date(date.getFullYear(), date.getMonth() + 1, 0).toISOString().slice(0, 10);
+  // Use UTC to avoid timezone issues
+  const year = date.getFullYear();
+  const month = date.getMonth();
+  
+  // First day of the month
+  const from = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  
+  // Last day of the month
+  const to = new Date(Date.UTC(year, month + 1, 0)).toISOString().slice(0, 10);
+  
   return { from, to };
 }

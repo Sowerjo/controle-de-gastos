@@ -830,6 +830,8 @@ $router->add('POST', '/api/v1/goals', function(){ Middleware::requireAuth(); $ui
     $planned=$in['planned_monthly_amount']??null; if($planned!=='') $planned=$planned!==null?(float)$planned:null;
     $rec_day=$in['recurring_day']??null; if($rec_day!=='') $rec_day=$rec_day!==null?(int)$rec_day:null;
     $priority=$in['priority']??'media'; if(!in_array($priority,['baixa','media','alta'])) $priority='media';
+    // Garantir que priority nunca seja null
+    if($priority === null || $priority === '') $priority = 'media';
     // validations
     if(!$name||$target<=0) json(['error'=>['message'=>'Dados inválidos']],422);
     if($target_date && strtotime($target_date) < strtotime(date('Y-m-d'))) json(['error'=>['message'=>'Data-limite no passado']],422);

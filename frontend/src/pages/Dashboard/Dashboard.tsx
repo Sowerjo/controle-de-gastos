@@ -245,19 +245,202 @@ export default function Dashboard() {
               </div>
             </div>
             <div>
-              <h2 className="font-semibold mb-2 heading">Metas</h2>
-              <div className="space-y-2">
-                {goals.map((g) => {
-                  const prog=Math.min(100, Math.round(100*(Number(g.current_amount||0)/Number(g.target_amount||1))));
-                  return (
-                    <div key={g.id} className="card p-3">
-                      <div className="flex justify-between text-sm"><span>{g.name}</span><span className="tnum">{fmtCurrency(g.current_amount)} / {fmtCurrency(g.target_amount)}</span></div>
-                      <div className="h-2 rounded mt-2 bg-white/5">
-                        <div className="h-2 rounded bg-gradient-to-r from-cyan-400 to-fuchsia-400" style={{ width: prog+'%' }} />
-                      </div>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-semibold heading flex items-center gap-2">
+                  <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                  </svg>
+                  Metas
+                </h2>
+                <div className="flex items-center gap-2">
+                  {goals.length > 0 && (
+                    <span className="text-xs text-[color:var(--text-dim)] bg-white/5 px-2 py-1 rounded">
+                      {goals.filter(g => {
+                        const prog = Math.min(100, Math.round(100*(Number(g.current_amount||0)/Number(g.target_amount||1))));
+                        return prog >= 100;
+                      }).length} de {goals.length} concluídas
+                    </span>
+                  )}
+                  <button 
+                    onClick={() => navigate('/goals')} 
+                    className="text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)] transition-colors flex items-center gap-1"
+                  >
+                    Ver todas
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {goals.length === 0 ? (
+                  <div className="card p-6 text-center text-[color:var(--text-dim)] border-2 border-dashed border-white/10">
+                    <div className="mb-3">
+                      <svg className="w-12 h-12 mx-auto text-[color:var(--text-dim)] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                      </svg>
                     </div>
-                  );
-                })}
+                    <div className="text-sm mb-2">Nenhuma meta cadastrada</div>
+                    <p className="text-xs text-[color:var(--text-dim)] mb-4">Defina objetivos financeiros e acompanhe seu progresso</p>
+                    <button 
+                      onClick={() => navigate('/goals')} 
+                      className="text-sm bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 px-4 py-2 rounded-lg transition-colors"
+                    >
+                      Criar primeira meta
+                    </button>
+                  </div>
+                ) : (
+                  goals.slice(0, 3).map((g) => {
+                    const prog = Math.min(100, Math.round(100*(Number(g.current_amount||0)/Number(g.target_amount||1))));
+                    const isDebtGoal = g.type === 'quitar_divida';
+                    const remaining = Number(g.target_amount||0) - Number(g.current_amount||0);
+                    const isCompleted = prog >= 100;
+                    
+                    // Calcular status baseado no prazo
+                    let statusColor = 'text-[color:var(--text-dim)]';
+                    let statusText = 'No prazo';
+                    let statusIcon = '⏱️';
+                    
+                    if (g.target_date) {
+                      const today = new Date();
+                      const targetDate = new Date(g.target_date);
+                      const daysLeft = Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+                      
+                      if (isCompleted) {
+                        statusColor = 'text-green-400';
+                        statusText = 'Concluída';
+                        statusIcon = '✅';
+                      } else if (daysLeft < 0) {
+                        statusColor = 'text-red-400';
+                        statusText = 'Atrasada';
+                        statusIcon = '⚠️';
+                      } else if (daysLeft <= 30) {
+                        statusColor = 'text-yellow-400';
+                        statusText = `${daysLeft}d restantes`;
+                        statusIcon = '⏰';
+                      } else {
+                        statusText = `${Math.ceil(daysLeft/30)}m restantes`;
+                        statusIcon = '📅';
+                      }
+                    }
+                    
+                    // Formatação da data limite
+                    const targetDateFormatted = g.target_date ? new Date(g.target_date).toLocaleDateString('pt-BR', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric'
+                    }) : null;
+                    
+                    return (
+                      <div key={g.id} className="card p-4 hover:bg-white/[0.02] transition-all duration-200 cursor-pointer border border-white/5 hover:border-white/10" onClick={() => navigate('/goals')}>
+                        {/* Header com nome, tipo e prioridade */}
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`inline-block w-3 h-3 rounded-full flex-shrink-0 ${
+                              isDebtGoal ? 'bg-pink-400' : 'bg-cyan-400'
+                            }`} />
+                            <div className="min-w-0">
+                              <span className="font-medium text-sm truncate block">{g.name}</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded">
+                                  {isDebtGoal ? '💳 Dívida' : '💰 Poupança'}
+                                </span>
+                                {g.strategy && (
+                                  <span className="text-[10px] text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded">
+                                    {g.strategy === 'linear' ? '📈 Linear' : '🎯 Alocação'}
+                                  </span>
+                                )}
+                                {g.priority === 'alta' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 flex-shrink-0">🔴 Alta</span>
+                                )}
+                                {g.priority === 'media' && (
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-400 flex-shrink-0">🟡 Média</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right flex-shrink-0">
+                            <div className="text-lg font-bold">{prog}%</div>
+                            <div className={`text-[10px] ${statusColor} flex items-center gap-1`}>
+                              <span>{statusIcon}</span>
+                              <span>{statusText}</span>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        {/* Valores e progresso */}
+                        <div className="space-y-2 mb-3">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-[color:var(--text-dim)]">Atual:</span>
+                            <span className="font-medium">{fmtCurrency(g.current_amount)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs">
+                            <span className="text-[color:var(--text-dim)]">Meta:</span>
+                            <span className="font-medium">{fmtCurrency(g.target_amount)}</span>
+                          </div>
+                          {!isCompleted && remaining > 0 && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-[color:var(--text-dim)]">Restante:</span>
+                              <span className="font-medium text-orange-400">{fmtCurrency(remaining)}</span>
+                            </div>
+                          )}
+                        </div>
+                        
+                        {/* Barra de progresso */}
+                        <div className="h-2.5 rounded-full bg-white/5 overflow-hidden mb-3">
+                          <div 
+                            className={`h-2.5 rounded-full transition-all duration-500 ${
+                              isCompleted 
+                                ? 'bg-gradient-to-r from-green-400 to-emerald-500' 
+                                : isDebtGoal 
+                                  ? 'bg-gradient-to-r from-pink-400 to-rose-400' 
+                                  : 'bg-gradient-to-r from-cyan-400 to-blue-500'
+                            }`} 
+                            style={{ width: prog+'%' }} 
+                          />
+                        </div>
+                        
+                        {/* Informações adicionais */}
+                        <div className="flex justify-between items-center text-[10px] text-[color:var(--text-dim)]">
+                          <div className="flex items-center gap-3">
+                            {g.planned_monthly_amount && (
+                              <span className="flex items-center gap-1">
+                                <span>💰</span>
+                                <span>{fmtCurrency(g.planned_monthly_amount)}/mês</span>
+                              </span>
+                            )}
+                            {targetDateFormatted && (
+                              <span className="flex items-center gap-1">
+                                <span>📅</span>
+                                <span>{targetDateFormatted}</span>
+                              </span>
+                            )}
+                          </div>
+                          {g.recurring_day && (
+                            <span className="flex items-center gap-1">
+                              <span>🔄</span>
+                              <span>Dia {g.recurring_day}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+                
+                {goals.length > 3 && (
+                  <div className="text-center pt-2">
+                    <button 
+                      onClick={() => navigate('/goals')} 
+                      className="text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)] transition-colors bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      Ver mais {goals.length - 3} metas
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

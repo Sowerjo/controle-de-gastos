@@ -1,7 +1,9 @@
 import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import NewTransactionModal from './NewTransactionModal';
+import SessionTimeoutModal from './SessionTimeoutModal';
 import { setAccessToken } from '../services/api';
+import { useSessionTimeout } from '../hooks/useSessionTimeout';
 
 // Ícones para navegação
 const Icons = {
@@ -129,6 +131,8 @@ export default function Layout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
+  const [showTimeoutModal, setShowTimeoutModal] = React.useState(false);
+  
   const doLogout = React.useCallback(() => {
     try {
       setAccessToken(null);
@@ -137,6 +141,28 @@ export default function Layout() {
     } catch {}
     navigate('/login');
   }, [navigate]);
+
+  const { extendSession } = useSessionTimeout({
+    timeoutMinutes: 5,
+    warningMinutes: 1,
+    onWarning: () => {
+      setShowTimeoutModal(true);
+    },
+    onTimeout: () => {
+      setShowTimeoutModal(false);
+      doLogout();
+    }
+  });
+
+  const handleExtendSession = React.useCallback(() => {
+    setShowTimeoutModal(false);
+    extendSession();
+  }, [extendSession]);
+
+  const handleTimeoutLogout = React.useCallback(() => {
+    setShowTimeoutModal(false);
+    doLogout();
+  }, [doLogout]);
   // Global shortcuts: G (dashboard), T (transactions)
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -233,6 +259,12 @@ export default function Layout() {
           // notify current page to refresh if it listens
           window.dispatchEvent(new CustomEvent('tx-created'));
         }} />
+        <SessionTimeoutModal
+          isOpen={showTimeoutModal}
+          onExtend={handleExtendSession}
+          onLogout={handleTimeoutLogout}
+          remainingSeconds={60}
+        />
       </div>
       <nav className="md:hidden fixed bottom-0 inset-x-0 surface-2 border-t flex justify-around p-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-lg">
         <A href="/" active={pathname === '/'}>
