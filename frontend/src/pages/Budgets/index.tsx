@@ -9,11 +9,47 @@ export default function Budgets() {
   const [categoryId, setCategoryId] = useState<number | ''>('');
   const [amount, setAmount] = useState('');
   const [rollover, setRollover] = useState<boolean>(() => sessionStorage.getItem('budgetRollover') === '1');
-  const load = async () => { const r = await api.get('/api/v1/budgets', { params: { month: month+'-01' } }); setItems(r.data.data || []); };
-  useEffect(() => { (async () => { const c = await api.get('/api/v1/categories'); setCats(c.data.data || []); })(); }, []);
+  const load = async () => { 
+    try {
+      const r = await api.get('/api/v1/budgets', { params: { month: month+'-01' } }); 
+      setItems(r.data.data || []); 
+    } catch (error) {
+      console.error('Erro ao carregar orçamentos:', error);
+    }
+  };
+  useEffect(() => { 
+    (async () => { 
+      try {
+        const c = await api.get('/api/v1/categories'); 
+        setCats(c.data.data || []); 
+      } catch (error) {
+        console.error('Erro ao carregar categorias:', error);
+      }
+    })(); 
+  }, []);
   useEffect(() => { load(); }, [month]);
-  const save = async (e: React.FormEvent) => { e.preventDefault(); if(!categoryId) return; await api.post('/api/v1/budgets', { categoryId, month: month+'-01', amount: Number(amount||0) }); setCategoryId(''); setAmount(''); await load(); };
-  const del = async (id: number) => { await api.delete('/api/v1/budgets', { params: { id } }); await load(); };
+  const save = async (e: React.FormEvent) => { 
+    e.preventDefault(); 
+    if(!categoryId) return; 
+    try {
+      await api.post('/api/v1/budgets', { categoryId, month: month+'-01', amount: Number(amount||0) }); 
+      setCategoryId(''); 
+      setAmount(''); 
+      await load(); 
+    } catch (error) {
+      console.error('Erro ao salvar orçamento:', error);
+      alert('Erro ao salvar orçamento. Tente novamente.');
+    }
+  };
+  const del = async (id: number) => { 
+    try {
+      await api.delete('/api/v1/budgets', { params: { id } }); 
+      await load(); 
+    } catch (error) {
+      console.error('Erro ao excluir orçamento:', error);
+      alert('Erro ao excluir orçamento. Tente novamente.');
+    }
+  };
   useEffect(() => { sessionStorage.setItem('budgetRollover', rollover ? '1' : '0'); }, [rollover]);
 
   const spentByCat = useSpentByCategory(month);
@@ -27,9 +63,16 @@ export default function Budgets() {
   };
 
   const updateInline = async (id: number, amt: number) => {
-    const it = items.find(i => i.id === id); if (!it) return;
-    await api.post('/api/v1/budgets', { categoryId: it.category_id, month: it.month, amount: amt });
-    await load();
+    const it = items.find(i => i.id === id); 
+    if (!it) return;
+    try {
+      await api.post('/api/v1/budgets', { categoryId: it.category_id, month: it.month, amount: amt });
+      await load();
+    } catch (error) {
+      console.error('Erro ao atualizar orçamento:', error);
+      alert('Erro ao atualizar orçamento. Tente novamente.');
+      await load(); // Recarrega para restaurar o valor original
+    }
   };
   return (
     <div className="p-4">
@@ -87,24 +130,43 @@ function InlineMoney({ value, onChange }: { value: number; onChange: (v: number)
 
 function useSpentByCategory(month: string){
   const [map, setMap] = useState<Record<number, number>>({});
-  useEffect(() => { (async () => {
-    // approximate: use report by category for month
-    try {
-      const from = month+'-01'; const to = new Date(new Date(from).getFullYear(), new Date(from).getMonth()+1, 0).toISOString().slice(0,10);
-      const r = await api.get('/api/v1/reports/by-category', { params: { from, to } });
-      const rows: any[] = r.data.data || [];
-      const cats = await api.get('/api/v1/categories');
-      const catIdx: Record<string, number> = {};
-      (cats.data.data||[]).forEach((c: any) => { catIdx[c.name] = c.id; });
-      const m: Record<number, number> = {};
-      for (const row of rows) {
-        const isExpense = (row.type || row.tipo) === 'DESPESA';
-        if (!isExpense) continue;
-        const id = catIdx[row.name || ''] || 0; if (!id) continue;
-        m[id] = (m[id] || 0) + Number(row.total||0);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  useEffect(() => { 
+    (async () => {
+      // approximate: use report by category for month
+      setIsLoading(true);
+      try {
+        const from = month+'-01'; 
+        const to = new Date(new Date(from).getFullYear(), new Date(from).getMonth()+1, 0).toISOString().slice(0,10);
+        
+        // Obter relatórios por categoria
+        const r = await api.get('/api/v1/reports/by-category', { params: { from, to } });
+        const rows: any[] = r.data.data || [];
+        
+        // Obter categorias para mapear IDs
+        const cats = await api.get('/api/v1/categories');
+        const catIdx: Record<string, number> = {};
+        (cats.data.data||[]).forEach((c: any) => { catIdx[c.name] = c.id; });
+        
+        // Calcular gastos por categoria
+        const m: Record<number, number> = {};
+        for (const row of rows) {
+          const isExpense = (row.type || row.tipo) === 'DESPESA';
+          if (!isExpense) continue;
+          const id = catIdx[row.name || ''] || 0; 
+          if (!id) continue;
+          m[id] = (m[id] || 0) + Number(row.total||0);
+        }
+        setMap(m);
+      } catch (error) { 
+        console.error('Erro ao carregar gastos por categoria:', error);
+        setMap({}); 
+      } finally {
+        setIsLoading(false);
       }
-      setMap(m);
-    } catch { setMap({}); }
-  })(); }, [month]);
+    })(); 
+  }, [month]);
+  
   return map;
 }

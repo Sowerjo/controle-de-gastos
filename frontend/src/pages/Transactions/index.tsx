@@ -130,18 +130,35 @@ export default function Transactions() {
     const amountNum = (() => {
       const s = String(form.valor ?? '').trim();
       if (!s) return 0;
-      // support 1.234,56 and 1234.56
-      const cleaned = s.replace(/\./g, '').replace(',', '.');
-      const n = Number(cleaned);
+      // Corrigido: preserva o formato correto para valores como 30,00 ou 1.234,56
+      // Verifica se o valor tem vírgula (formato brasileiro)
+      let n;
+      if (s.includes(',')) {
+        // Formato brasileiro: 1.234,56 -> 1234.56
+        const cleaned = s.replace(/\./g, '').replace(',', '.');
+        n = Number(cleaned);
+      } else {
+        // Formato sem vírgula ou formato americano: 1234.56
+        n = Number(s);
+      }
       return isNaN(n) ? 0 : n;
     })();
 
+    // Se o valor for negativo, ajusta automaticamente para despesa
+    let adjustedType = form.tipo;
+    let adjustedAmount = amountNum;
+    
+    if (amountNum < 0) {
+      adjustedType = 'despesa';
+      adjustedAmount = Math.abs(amountNum);
+    }
+    
     const payload: any = {
       id: form.id,
       date: form.data,
       description: form.descricao,
-      type: form.tipo === 'receita' ? 'RECEITA' : 'DESPESA',
-      amount: amountNum,
+      type: adjustedType === 'receita' ? 'RECEITA' : 'DESPESA',
+      amount: adjustedAmount,
       accountId: form.accountId || undefined,
       categoryId: form.categoryId || undefined,
       payeeName: form.payeeName || undefined,
@@ -153,8 +170,8 @@ export default function Transactions() {
         ...t,
         descricao: form.descricao,
         data: form.data,
-        valor: amountNum,
-        tipo: form.tipo,
+        valor: adjustedAmount,
+        tipo: adjustedType,
         conta: form.accountId ? { id: Number(form.accountId), name: accounts.find(a => a.id === Number(form.accountId))?.name || t.conta?.name || '' } : (form.accountId === '' ? null : t.conta ?? null),
         categoria: form.categoryId ? { id: Number(form.categoryId), name: categories.find(c => c.id === Number(form.categoryId))?.name || t.categoria?.name || '' } : (form.categoryId === '' ? null : t.categoria ?? null),
         payee: form.payeeName ? { id: t.payee?.id || 0, name: form.payeeName } : (form.payeeName === '' ? null : t.payee ?? null),
@@ -227,55 +244,87 @@ export default function Transactions() {
       {editing && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50" onClick={()=>setEditing(null)}>
           <div className="bg-[color:var(--card)] w-full sm:max-w-lg sm:rounded shadow-xl" onClick={(e)=>e.stopPropagation()}>
-            <div className="p-4 border-b border-white/10 font-semibold">Editar transação</div>
-            <div className="p-4 space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">Data
-                  <input type="date" className="input w-full" value={form.data||''} onChange={(e)=>setForm({...form, data:e.target.value})} />
-                </label>
-                <label className="block">Tipo
-                  <select className="input w-full" value={form.tipo} onChange={(e)=>setForm({...form, tipo:e.target.value})}>
-                    <option value="receita">Receita</option>
-                    <option value="despesa">Despesa</option>
-                  </select>
-                </label>
+            <div className="p-4 border-b border-white/10 font-semibold flex items-center justify-between">
+              <span>Editar transação</span>
+              <button className="text-sm text-[color:var(--text-dim)] hover:text-[color:var(--text)]" onClick={()=>setEditing(null)}>×</button>
+            </div>
+            <div className="p-4 space-y-4 text-sm">
+              {/* Tipo e valor em destaque */}
+              <div className="flex items-center gap-3 mb-2">
+                <div className="flex-1">
+                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Tipo</div>
+                  <div className="flex rounded-md overflow-hidden border border-white/10">
+                    <button 
+                      className={`flex-1 py-2 px-3 ${form.tipo === 'receita' ? 'bg-emerald-600 text-white' : 'hover:bg-white/5'}`}
+                      onClick={() => setForm({...form, tipo: 'receita'})}
+                    >
+                      Receita
+                    </button>
+                    <button 
+                      className={`flex-1 py-2 px-3 ${form.tipo === 'despesa' ? 'bg-rose-600 text-white' : 'hover:bg-white/5'}`}
+                      onClick={() => setForm({...form, tipo: 'despesa'})}
+                    >
+                      Despesa
+                    </button>
+                  </div>
+                </div>
+                <div className="flex-1">
+                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Valor</div>
+                  <input 
+                    className="input w-full text-lg py-1 tnum" 
+                    value={form.valor||''} 
+                    onChange={(e)=>setForm({...form, valor:e.target.value})} 
+                    placeholder="0,00"
+                    inputMode="decimal"
+                    autoFocus
+                  />
+                  <div className="text-xs text-[color:var(--text-dim)] mt-1">Use valores negativos para despesas</div>
+                </div>
               </div>
-              <label className="block">Descrição
-                <input className="input w-full" value={form.descricao||''} onChange={(e)=>setForm({...form, descricao:e.target.value})} />
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">Valor
-                  <input className="input w-full" value={form.valor||''} onChange={(e)=>setForm({...form, valor:e.target.value})} />
-                </label>
-                <label className="block">Status
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Data</div>
+                  <input type="date" className="input w-full" value={form.data||''} onChange={(e)=>setForm({...form, data:e.target.value})} />
+                </div>
+                <div>
+                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Status</div>
                   <select className="input w-full" value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})}>
                     <option value="CLEARED">Compensada</option>
                     <option value="PENDING">Pendente</option>
                     <option value="RECONCILED">Conferida</option>
                   </select>
-                </label>
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <label className="block">Conta
-                  <select className="input w-full" value={form.accountId||''} onChange={(e)=>setForm({...form, accountId:e.target.value?Number(e.target.value):''})}>
-                    <option value="">—</option>
+              
+              <div>
+                <div className="text-xs text-[color:var(--text-dim)] mb-1">Descrição</div>
+                <input className="input w-full" value={form.descricao||''} onChange={(e)=>setForm({...form, descricao:e.target.value})} />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Conta</div>
+                  <select className="input w-full" value={form.accountId||''} onChange={(e)=>setForm({...form, accountId:e.target.value?Number(e.target.value):''})}>                    <option value="">—</option>
                     {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
                   </select>
-                </label>
-                <label className="block">Categoria
-                  <select className="input w-full" value={form.categoryId||''} onChange={(e)=>setForm({...form, categoryId:e.target.value?Number(e.target.value):''})}>
-                    <option value="">—</option>
+                </div>
+                <div>
+                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Categoria</div>
+                  <select className="input w-full" value={form.categoryId||''} onChange={(e)=>setForm({...form, categoryId:e.target.value?Number(e.target.value):''})}>                    <option value="">—</option>
                     {categories.map((c:any)=> (<option key={c.id} value={c.id}>{c.name}</option>))}
                   </select>
-                </label>
+                </div>
               </div>
-              <label className="block">Favorecido
+              
+              <div>
+                <div className="text-xs text-[color:var(--text-dim)] mb-1">Favorecido</div>
                 <input className="input w-full" value={form.payeeName||''} onChange={(e)=>setForm({...form, payeeName:e.target.value})} />
-              </label>
+              </div>
             </div>
             <div className="p-4 border-t border-white/10 flex justify-end gap-2">
-              <button className="px-3 py-2 rounded border border-white/10" onClick={()=>setEditing(null)}>Cancelar</button>
-              <button className="px-3 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white" onClick={saveEdit}>Salvar</button>
+              <button className="px-4 py-2 rounded border border-white/10 hover:bg-white/5" onClick={()=>setEditing(null)}>Cancelar</button>
+              <button className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white" onClick={saveEdit}>Salvar</button>
             </div>
           </div>
         </div>

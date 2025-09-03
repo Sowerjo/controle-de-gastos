@@ -156,7 +156,7 @@ $router->add('GET', '/api/v1/accounts', function(){ Middleware::requireAuth();
     // include lightweight balance (opening + sum)
     $accounts=$st->fetchAll();
     foreach($accounts as &$a){
-        $s=$pdo->prepare('SELECT COALESCE(SUM(CASE WHEN type="RECEITA" THEN amount ELSE -amount END),0) as mv FROM transactions WHERE user_id=? AND account_id=?');
+        $s=$pdo->prepare('SELECT COALESCE(SUM(CASE WHEN type="RECEITA" THEN amount WHEN type="DESPESA" THEN -amount ELSE 0 END),0) as mv FROM transactions WHERE user_id=? AND account_id=?');
         $s->execute([$id,$a['id']]);
         $mv=$s->fetchColumn();
         $a['balance']= (float)$a['opening_balance'] + (float)$mv;
@@ -217,13 +217,15 @@ $router->add('POST', '/api/v1/transactions', function(){ Middleware::requireAuth
     // accept both EN/PT keys
     $type=$in['type']??($in['tipo']??null);
     if ($type && ($type==='receita' || $type==='despesa')) { $type = strtoupper($type); }
+    if (!in_array($type, ['RECEITA', 'DESPESA'])) { json(['error'=>['message'=>'Tipo de transação inválido']],422); }
     $amount=$in['amount']??($in['valor']??null); if ($amount!==null) $amount = (float)$amount;
+    if ($amount <= 0) { json(['error'=>['message'=>'Valor deve ser maior que zero']],422); }
     $date=$in['date']??($in['data']??null);
     // Normalize date: accept DD/MM/YYYY or YYYY/MM/DD
     if($date){
         $t=trim((string)$date);
-        if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)) { $date=sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
-        elseif(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)) { $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; $date=sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
+        if(preg_match('/^(\d{4})[\/(\d{1,2})[\/(\d{1,2})$/',$t,$m)) { $date=sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
+        elseif(preg_match('/^(\d{1,2})[\/(\d{1,2})[\/(\d{2,4})$/',$t,$m)) { $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; $date=sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
         // basic validation
         if(!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$date,$mm) || !checkdate((int)$mm[2],(int)$mm[3],(int)$mm[1])) { json(['error'=>['message'=>'Data inválida']],422); }
     }
@@ -232,9 +234,15 @@ $router->add('POST', '/api/v1/transactions', function(){ Middleware::requireAuth
     $acc=$in['accountId']??($in['contaId']??null);
     $payee=$in['payeeId']??null; $payeeName=trim($in['payeeName']??'');
     $status=$in['status']??'CLEARED';
+    if (!in_array($status, ['PENDING', 'CLEARED', 'RECONCILED'])) { json(['error'=>['message'=>'Status inválido']],422); }
     $tags=$in['tags']??($in['tagIds']??[]); $tagNames=$in['tagNames']??[];
     $splits=$in['splits']??[]; // [{amount, description, categoryId?, payeeId?}]
     if(!$acc||!$type||!$amount||!$date) json(['error'=>['message'=>'Dados incompletos']],422);
+    // Validar conta
+    $pdo=DB::conn();
+    $st=$pdo->prepare('SELECT id FROM accounts WHERE id=? AND user_id=? AND archived_at IS NULL');
+    $st->execute([$acc, $id]);
+    if (!$st->fetch()) { json(['error'=>['message'=>'Conta inválida ou arquivada']],422); }
     $pdo=DB::conn();
     // resolve payee by name if provided
     if(!$payee && $payeeName!==''){
@@ -257,8 +265,28 @@ $router->add('POST', '/api/v1/transactions', function(){ Middleware::requireAuth
     }
     // splits
     if (is_array($splits) && count($splits)) {
+        // Verificar se a soma dos splits é igual ao valor total da transação
+        $totalSplits = 0;
+        foreach($splits as $sp) {
+            $totalSplits += (float)($sp['amount'] ?? 0);
+        }
+        
+        // Garantir que a soma dos splits seja igual ao valor total da transação
+        if (abs($totalSplits - $amount) > 0.01) { // Tolerância de 0.01 para evitar problemas de arredondamento
+            json(['error'=>['message'=>'A soma dos valores dos splits deve ser igual ao valor total da transação']], 422);
+        }
+        
         $ins=$pdo->prepare('INSERT INTO transaction_splits (transaction_id,amount,description,category_id,payee_id) VALUES (?,?,?,?,?)');
-        foreach($splits as $sp){ $amt=(float)($sp['amount']??0); $d=$sp['description']??null; $c=$sp['categoryId']??null; $p=$sp['payeeId']??null; $ins->execute([$txId,$amt,$d,$c,$p]); }
+        foreach($splits as $sp){ 
+            $amt=(float)($sp['amount']??0); 
+            if ($amt <= 0) {
+                json(['error'=>['message'=>'Valor do split deve ser maior que zero']], 422);
+            }
+            $d=$sp['description']??null; 
+            $c=$sp['categoryId']??null; 
+            $p=$sp['payeeId']??null; 
+            $ins->execute([$txId,$amt,$d,$c,$p]); 
+        }
     }
     json(['data'=>['ok'=>true,'id'=>$txId]]);
 });
@@ -284,11 +312,22 @@ $router->add('PUT', '/api/v1/transactions', function(){ Middleware::requireAuth(
     // Accept EN/PT aliases
     $fields=[]; $args=[];
     // account
-    if(array_key_exists('accountId',$in) || array_key_exists('contaId',$in)) { $fields[]='account_id=?'; $args[]=(int)($in['accountId']??$in['contaId']); }
+    if(array_key_exists('accountId',$in) || array_key_exists('contaId',$in)) { 
+        $accId = (int)($in['accountId']??$in['contaId']);
+        // Verificar se a conta existe e não está arquivada
+        $stAcc = $pdo->prepare('SELECT id FROM accounts WHERE id=? AND user_id=? AND archived_at IS NULL');
+        $stAcc->execute([$accId, $uid]);
+        if(!$stAcc->fetch()) json(['error'=>['message'=>'Conta inválida ou arquivada']], 422);
+        $fields[]='account_id=?'; $args[]=$accId;
+    }
     // type
     if(array_key_exists('type',$in) || array_key_exists('tipo',$in)) { $v=$in['type']??$in['tipo']; if($v==='receita'||$v==='despesa'){ $v=strtoupper($v);} if(!in_array($v,['RECEITA','DESPESA'])) json(['error'=>['message'=>'type inválido']],422); $fields[]='type=?'; $args[]=$v; }
     // amount
-    if(array_key_exists('amount',$in) || array_key_exists('valor',$in)) { $amt=(float)($in['amount']??$in['valor']); $fields[]='amount=?'; $args[]=abs($amt); }
+    if(array_key_exists('amount',$in) || array_key_exists('valor',$in)) { 
+        $amt=(float)($in['amount']??$in['valor']); 
+        if($amt <= 0) json(['error'=>['message'=>'Valor deve ser maior que zero']], 422);
+        $fields[]='amount=?'; $args[]=abs($amt); 
+    }
     // date
     if(array_key_exists('date',$in) || array_key_exists('data',$in)) { $d=$in['date']??$in['data'];
         if($d){ $t=trim((string)$d);
@@ -333,8 +372,22 @@ $router->add('POST', '/api/v1/transfers', function(){ Middleware::requireAuth();
         if(!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/',$date,$mm) || !checkdate((int)$mm[2],(int)$mm[3],(int)$mm[1])) { json(['error'=>['message'=>'Data inválida']],422); }
     }
     $desc=$in['description']??($in['descricao']??'Transferência');
-    if(!$from||!$to||!$amount||!$date||$from===$to) json(['error'=>['message'=>'Dados inválidos']],422);
+    
+    // Validações básicas
+    if(!$from||!$to||!$amount||!$date) json(['error'=>['message'=>'Dados incompletos']],422);
+    if($from===$to) json(['error'=>['message'=>'Contas de origem e destino não podem ser iguais']],422);
+    if($amount <= 0) json(['error'=>['message'=>'Valor deve ser maior que zero']],422);
+    
     $pdo=DB::conn();
+    
+    // Verificar se as contas existem e não estão arquivadas
+    $stFrom = $pdo->prepare('SELECT id FROM accounts WHERE id=? AND user_id=? AND archived_at IS NULL');
+    $stFrom->execute([(int)$from, $uid]);
+    if(!$stFrom->fetch()) json(['error'=>['message'=>'Conta de origem inválida ou arquivada']], 422);
+    
+    $stTo = $pdo->prepare('SELECT id FROM accounts WHERE id=? AND user_id=? AND archived_at IS NULL');
+    $stTo->execute([(int)$to, $uid]);
+    if(!$stTo->fetch()) json(['error'=>['message'=>'Conta de destino inválida ou arquivada']], 422);
     $pdo->beginTransaction();
     try {
         $grp=bin2hex(random_bytes(8));
@@ -352,21 +405,290 @@ $router->add('POST', '/api/v1/transfers', function(){ Middleware::requireAuth();
     }
 });
 
+// Verificar integridade dos dados
+$router->add('GET', '/api/v1/check-data-integrity', function(){ Middleware::requireAuth();
+    $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn();
+    $result = ['fixed' => 0, 'errors' => []];
+    
+    // 1. Verificar transações com categorias inválidas
+    $st=$pdo->prepare("SELECT t.id FROM transactions t LEFT JOIN categories c ON t.category_id = c.id 
+                      WHERE t.user_id=? AND t.category_id IS NOT NULL AND c.id IS NULL");
+    $st->execute([$uid]);
+    $invalidCategoryTxs = $st->fetchAll();
+    
+    // Corrigir transações com categorias inválidas
+    if(count($invalidCategoryTxs) > 0) {
+        $stUpdate = $pdo->prepare("UPDATE transactions SET category_id = NULL WHERE id = ? AND user_id = ?");
+        foreach($invalidCategoryTxs as $tx) {
+            $stUpdate->execute([$tx['id'], $uid]);
+            $result['fixed']++;
+        }
+    }
+    
+    // 2. Verificar splits com categorias inválidas
+    $st=$pdo->prepare("SELECT ts.id FROM transaction_splits ts 
+                      LEFT JOIN categories c ON ts.category_id = c.id 
+                      JOIN transactions t ON ts.transaction_id = t.id 
+                      WHERE t.user_id=? AND ts.category_id IS NOT NULL AND c.id IS NULL");
+    $st->execute([$uid]);
+    $invalidCategorySplits = $st->fetchAll();
+    
+    // Corrigir splits com categorias inválidas
+    if(count($invalidCategorySplits) > 0) {
+        $stUpdate = $pdo->prepare("UPDATE transaction_splits SET category_id = NULL WHERE id = ?");
+        foreach($invalidCategorySplits as $split) {
+            $stUpdate->execute([$split['id']]);
+            $result['fixed']++;
+        }
+    }
+    
+    // 3. Verificar transações com payees inválidos
+    $st=$pdo->prepare("SELECT t.id FROM transactions t LEFT JOIN payees p ON t.payee_id = p.id 
+                      WHERE t.user_id=? AND t.payee_id IS NOT NULL AND p.id IS NULL");
+    $st->execute([$uid]);
+    $invalidPayeeTxs = $st->fetchAll();
+    
+    // Corrigir transações com payees inválidos
+    if(count($invalidPayeeTxs) > 0) {
+        $stUpdate = $pdo->prepare("UPDATE transactions SET payee_id = NULL WHERE id = ? AND user_id = ?");
+        foreach($invalidPayeeTxs as $tx) {
+            $stUpdate->execute([$tx['id'], $uid]);
+            $result['fixed']++;
+        }
+    }
+    
+    // 4. Verificar splits com payees inválidos
+    $st=$pdo->prepare("SELECT ts.id FROM transaction_splits ts 
+                      LEFT JOIN payees p ON ts.payee_id = p.id 
+                      JOIN transactions t ON ts.transaction_id = t.id 
+                      WHERE t.user_id=? AND ts.payee_id IS NOT NULL AND p.id IS NULL");
+    $st->execute([$uid]);
+    $invalidPayeeSplits = $st->fetchAll();
+    
+    // Corrigir splits com payees inválidos
+    if(count($invalidPayeeSplits) > 0) {
+        $stUpdate = $pdo->prepare("UPDATE transaction_splits SET payee_id = NULL WHERE id = ?");
+        foreach($invalidPayeeSplits as $split) {
+            $stUpdate->execute([$split['id']]);
+            $result['fixed']++;
+        }
+    }
+    
+    $result['issues_found'] = count($invalidCategoryTxs) + count($invalidCategorySplits) + 
+                             count($invalidPayeeTxs) + count($invalidPayeeSplits);
+    
+    json(['data'=>$result]);
+});
+
+// Verificar integridade das transferências
+$router->add('GET', '/api/v1/check-transfers', function(){ Middleware::requireAuth();
+    $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn();
+    
+    // Encontrar grupos de transferência com apenas uma transação (órfãs)
+    $st=$pdo->prepare("SELECT transfer_group, COUNT(*) as count FROM transactions 
+                      WHERE user_id=? AND transfer_group IS NOT NULL 
+                      GROUP BY transfer_group HAVING COUNT(*) != 2");
+    $st->execute([$uid]);
+    $orphanGroups = $st->fetchAll();
+    
+    $fixed = 0;
+    $errors = [];
+    
+    // Corrigir transferências órfãs
+    foreach($orphanGroups as $group) {
+        $groupId = $group['transfer_group'];
+        
+        // Verificar se existe apenas uma transação no grupo
+        if($group['count'] == 1) {
+            // Obter a transação órfã
+            $stTx=$pdo->prepare("SELECT * FROM transactions WHERE user_id=? AND transfer_group=? LIMIT 1");
+            $stTx->execute([$uid, $groupId]);
+            $orphanTx = $stTx->fetch();
+            
+            if($orphanTx) {
+                try {
+                    $pdo->beginTransaction();
+                    
+                    // Criar a transação complementar
+                    $complementType = $orphanTx['type'] == 'RECEITA' ? 'DESPESA' : 'RECEITA';
+                    $complementAccountId = null;
+                    
+                    // Encontrar outra conta para a transação complementar
+                    $stAcc=$pdo->prepare("SELECT id FROM accounts WHERE user_id=? AND id != ? AND archived_at IS NULL LIMIT 1");
+                    $stAcc->execute([$uid, $orphanTx['account_id']]);
+                    $complementAccount = $stAcc->fetch();
+                    
+                    if($complementAccount) {
+                        $complementAccountId = $complementAccount['id'];
+                        
+                        // Inserir transação complementar
+                        $stInsert=$pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,transfer_group,created_at) 
+                                               VALUES (?,?,?,?,?,?,?,NOW())');
+                        $stInsert->execute([
+                            $uid,
+                            $complementAccountId,
+                            $complementType,
+                            $orphanTx['amount'],
+                            $orphanTx['date'],
+                            $orphanTx['description'] ?: 'Transferência (corrigida)',
+                            $groupId
+                        ]);
+                        
+                        $fixed++;
+                        $pdo->commit();
+                    } else {
+                        $pdo->rollBack();
+                        $errors[] = "Não foi possível encontrar uma conta para criar a transação complementar para o grupo {$groupId}";
+                    }
+                } catch(\Throwable $e) {
+                    $pdo->rollBack();
+                    $errors[] = "Erro ao corrigir transferência do grupo {$groupId}: " . $e->getMessage();
+                }
+            }
+        } else if($group['count'] > 2) {
+            // Caso raro: mais de 2 transações no mesmo grupo de transferência
+            // Manter apenas as duas primeiras e remover as demais
+            try {
+                $stExcess=$pdo->prepare("SELECT id FROM transactions WHERE user_id=? AND transfer_group=? ORDER BY id LIMIT 99999 OFFSET 2");
+                $stExcess->execute([$uid, $groupId]);
+                $excessTxs = $stExcess->fetchAll();
+                
+                foreach($excessTxs as $tx) {
+                    $stDelete = $pdo->prepare("DELETE FROM transactions WHERE id=? AND user_id=?");
+                    $stDelete->execute([$tx['id'], $uid]);
+                    $fixed++;
+                }
+            } catch(\Throwable $e) {
+                $errors[] = "Erro ao remover transações excedentes do grupo {$groupId}: " . $e->getMessage();
+            }
+        }
+    }
+    
+    json(['data'=>[
+        'orphan_groups' => count($orphanGroups),
+        'fixed' => $fixed,
+        'errors' => $errors
+    ]]);
+});
+
+// Verificar e corrigir todos os problemas de integridade de dados
+$router->add('GET', '/api/v1/fix-all-integrity-issues', function(){ Middleware::requireAuth();
+    $uid=$GLOBALS['auth_user_id'];
+    $result = ['data_integrity' => [], 'transfers' => []];
+    
+    // 1. Verificar integridade dos dados
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $_SERVER['REQUEST_SCHEME'] . '://' . $_SERVER['HTTP_HOST'] . '/api/v1/check-data-integrity');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: ' . $_SERVER['HTTP_AUTHORIZATION']]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    if ($response) {
+        $dataIntegrityResult = json_decode($response, true);
+        $result['data_integrity'] = $dataIntegrityResult['data'] ?? [];
+    }
+    
+    // 2. Verificar integridade das transferências
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $_SERVER['REQUEST_SCHEME'] . '://' . $_SERVER['HTTP_HOST'] . '/api/v1/check-transfers');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Authorization: ' . $_SERVER['HTTP_AUTHORIZATION']]);
+    $response = curl_exec($ch);
+    curl_close($ch);
+    
+    if ($response) {
+        $transfersResult = json_decode($response, true);
+        $result['transfers'] = $transfersResult['data'] ?? [];
+    }
+    
+    // Calcular total de problemas corrigidos
+    $totalFixed = ($result['data_integrity']['fixed'] ?? 0) + ($result['transfers']['fixed'] ?? 0);
+    $result['total_fixed'] = $totalFixed;
+    
+    json(['data' => $result]);
+});
+
 // Dashboard summary
 $router->add('GET', '/api/v1/dashboard/summary', function(){ Middleware::requireAuth();
     $id=$GLOBALS['auth_user_id'];$pdo=DB::conn();
     $from=$_GET['from']??date('Y-m-01'); $to=$_GET['to']??date('Y-m-t');
+    
+    // Totais por tipo de transação
     $st=$pdo->prepare("SELECT type, SUM(amount) total FROM transactions WHERE user_id=? AND date BETWEEN ? AND ? GROUP BY type");
     $st->execute([$id,$from,$to]); $rows=$st->fetchAll(); $sum=['RECEITA'=>0,'DESPESA'=>0]; foreach($rows as $r){$sum[$r['type']] = (float)$r['total'];}
     $data=['receitas'=>$sum['RECEITA'],'despesas'=>$sum['DESPESA'],'saldo'=>$sum['RECEITA']-$sum['DESPESA']];
     // include aliases expected by frontend
     $data['totalReceitas']=$data['receitas'];
     $data['totalDespesas']=$data['despesas'];
+    
+    // Tendência de receitas e despesas (últimos 6 meses)
+    $trends = [];
+    for ($i = 5; $i >= 0; $i--) {
+        $monthStart = date('Y-m-01', strtotime("-$i months"));
+        $monthEnd = date('Y-m-t', strtotime("-$i months"));
+        $monthLabel = date('M/Y', strtotime($monthStart));
+        
+        $stTrend = $pdo->prepare("SELECT type, SUM(amount) total FROM transactions 
+                               WHERE user_id=? AND date BETWEEN ? AND ? GROUP BY type");
+        $stTrend->execute([$id, $monthStart, $monthEnd]);
+        $monthData = $stTrend->fetchAll();
+        $monthSum = ['RECEITA' => 0, 'DESPESA' => 0];
+        foreach ($monthData as $r) {
+            $monthSum[$r['type']] = (float)$r['total'];
+        }
+        
+        $trends[] = [
+            'month' => $monthLabel,
+            'receitas' => $monthSum['RECEITA'],
+            'despesas' => $monthSum['DESPESA'],
+            'saldo' => $monthSum['RECEITA'] - $monthSum['DESPESA']
+        ];
+    }
+    $data['trends'] = $trends;
+    
     // per-account balances
-    $accs=$pdo->prepare('SELECT id,name,opening_balance FROM accounts WHERE user_id=? AND archived_at IS NULL ORDER BY display_order,name');
+    $accs=$pdo->prepare('SELECT id,name,opening_balance,type FROM accounts WHERE user_id=? AND archived_at IS NULL ORDER BY display_order,name');
     $accs->execute([$id]); $accounts=$accs->fetchAll();
-    foreach($accounts as &$a){ $s=$pdo->prepare('SELECT COALESCE(SUM(CASE WHEN type="RECEITA" THEN amount ELSE -amount END),0) FROM transactions WHERE user_id=? AND account_id=?'); $s->execute([$id,$a['id']]); $mv=(float)$s->fetchColumn(); $a['balance']=(float)$a['opening_balance']+$mv; }
+    foreach($accounts as &$a){ 
+        // Saldo total
+        $s=$pdo->prepare('SELECT COALESCE(SUM(CASE WHEN type="RECEITA" THEN amount WHEN type="DESPESA" THEN -amount ELSE 0 END),0) FROM transactions WHERE user_id=? AND account_id=?'); 
+        $s->execute([$id,$a['id']]); 
+        $mv=(float)$s->fetchColumn(); 
+        $a['balance']=(float)$a['opening_balance']+$mv; 
+        
+        // Movimentação do mês atual
+        $s=$pdo->prepare('SELECT COALESCE(SUM(CASE WHEN type="RECEITA" THEN amount WHEN type="DESPESA" THEN -amount ELSE 0 END),0) FROM transactions WHERE user_id=? AND account_id=? AND date BETWEEN ? AND ?'); 
+        $s->execute([$id,$a['id'],$from,$to]); 
+        $a['month_movement']=(float)$s->fetchColumn(); 
+    }
     $data['accounts']=$accounts;
+    
+    // Top 5 categorias de despesas do mês
+    $stTopCat = $pdo->prepare("SELECT c.name, SUM(t.amount) total 
+                            FROM transactions t 
+                            LEFT JOIN categories c ON c.id=t.category_id 
+                            WHERE t.user_id=? AND t.type='DESPESA' AND t.date BETWEEN ? AND ? 
+                            GROUP BY c.name 
+                            ORDER BY total DESC LIMIT 5");
+    $stTopCat->execute([$id,$from,$to]);
+    $data['top_categories'] = $stTopCat->fetchAll();
+    
+    // Resumo de orçamentos do mês
+    $stBudget = $pdo->prepare("SELECT 
+                              b.category_id, 
+                              c.name as category, 
+                              b.amount as budget, 
+                              COALESCE(SUM(t.amount), 0) as spent 
+                            FROM budgets b 
+                            JOIN categories c ON c.id=b.category_id 
+                            LEFT JOIN transactions t ON t.category_id=b.category_id AND t.type='DESPESA' AND t.date BETWEEN ? AND ? AND t.user_id=? 
+                            WHERE b.user_id=? AND b.month=? 
+                            GROUP BY b.category_id, c.name, b.amount 
+                            ORDER BY c.name");
+    $stBudget->execute([$from, $to, $id, $id, date('Y-m-01')]);
+    $data['budgets'] = $stBudget->fetchAll();
+    
     json(['data'=>$data]);
 });
 

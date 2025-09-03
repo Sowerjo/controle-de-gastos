@@ -242,8 +242,8 @@ function GoalModal({ goal, onClose, onSaved }: { goal: Goal | null; onClose: () 
     if (payload.target_date && payload.target_date < new Date().toISOString().slice(0,10)) { setError('A data limite não pode estar no passado'); setSaving(false); return; }
     if (payload.strategy==='por_alocacao' && !payload.account_id && !payload.category_id) { setError('Selecione uma conta ou categoria para a estratégia por alocação'); setSaving(false); return; }
     try {
-      if (editing) {
-        await api.put('/api/v1/goals', { id: goal!.id, ...payload });
+      if (editing && goal) {
+        await api.put('/api/v1/goals', { id: goal.id, ...payload });
       } else {
         await api.post('/api/v1/goals', payload);
       }
@@ -342,7 +342,8 @@ function ContributeModal({ goal, onClose, onSaved }: { goal: Goal; onClose: () =
     const payload: any = { id: goal.id, amount: Number(amount||0), date };
     if (accountId) payload.account_id = accountId;
     if (categoryId) payload.category_id = categoryId;
-    if (!payload.amount || (!goal.account_id && !payload.account_id)) { setError('Informe um valor e selecione a conta'); setSaving(false); return; }
+    if (!payload.amount) { setError('Informe um valor para o aporte'); setSaving(false); return; }
+    if (!accountId && !goal.account_id) { setError('Selecione uma conta para o aporte'); setSaving(false); return; }
     try {
       await api.post('/api/v1/goals/contribute', payload);
       onSaved(); onClose();
