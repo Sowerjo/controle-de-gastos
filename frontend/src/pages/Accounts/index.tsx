@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { fmtCurrency } from '../../utils/format';
+import { useAccounts, notifyAccountsUpdate } from '../../hooks/useAccounts';
 
 type Account = { id: number; name: string; type: string; opening_balance: number; balance?: number };
 
@@ -14,19 +15,12 @@ const TYPES = [
 ];
 
 export default function Accounts() {
-  const [items, setItems] = useState<Account[]>([]);
+  const { accounts: items, refreshAccounts } = useAccounts();
   const [name, setName] = useState('');
   const [type, setType] = useState('checking');
   const [opening, setOpening] = useState('0');
   const [editing, setEditing] = useState<Account | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const load = async () => {
-    const res = await api.get('/api/v1/accounts');
-    setItems(res.data.data || []);
-  };
-  useEffect(() => {
-    load();
-  }, []);
 
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,12 +28,14 @@ export default function Accounts() {
     setName('');
     setType('checking');
     setOpening('0');
-    await load();
+    await refreshAccounts();
+    notifyAccountsUpdate();
   };
 
   const toggleArchive = async (id: number) => {
     await api.post('/api/v1/accounts/archive', { id });
-    await load();
+    await refreshAccounts();
+    notifyAccountsUpdate();
   };
 
   const remove = async (id: number) => {
@@ -47,7 +43,8 @@ export default function Accounts() {
     if (!ok) return;
     try {
       await api.delete('/api/v1/accounts', { params: { id } });
-      await load();
+      await refreshAccounts();
+      notifyAccountsUpdate();
     } catch (e: any) {
       alert(e?.response?.data?.error?.message || 'Não foi possível excluir');
     }
@@ -137,7 +134,8 @@ export default function Accounts() {
           onClose={closeEdit}
           onSaved={() => {
             closeEdit();
-            load();
+            refreshAccounts();
+            notifyAccountsUpdate();
           }}
         />
       )}

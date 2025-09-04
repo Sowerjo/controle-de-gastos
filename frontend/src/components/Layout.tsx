@@ -1,9 +1,7 @@
 import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import NewTransactionModal from './NewTransactionModal';
-import SessionTimeoutModal from './SessionTimeoutModal';
 import { setAccessToken } from '../services/api';
-import { useSessionTimeout } from '../hooks/useSessionTimeout';
 
 // Ícones para navegação
 const Icons = {
@@ -131,7 +129,6 @@ export default function Layout() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-  const [showTimeoutModal, setShowTimeoutModal] = React.useState(false);
   
   const doLogout = React.useCallback(() => {
     try {
@@ -142,27 +139,6 @@ export default function Layout() {
     navigate('/login');
   }, [navigate]);
 
-  const { extendSession } = useSessionTimeout({
-    timeoutMinutes: 5,
-    warningMinutes: 1,
-    onWarning: () => {
-      setShowTimeoutModal(true);
-    },
-    onTimeout: () => {
-      setShowTimeoutModal(false);
-      doLogout();
-    }
-  });
-
-  const handleExtendSession = React.useCallback(() => {
-    setShowTimeoutModal(false);
-    extendSession();
-  }, [extendSession]);
-
-  const handleTimeoutLogout = React.useCallback(() => {
-    setShowTimeoutModal(false);
-    doLogout();
-  }, [doLogout]);
   // Global shortcuts: G (dashboard), T (transactions)
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -249,6 +225,15 @@ export default function Layout() {
             <span>Perfil</span>
           </span>
         </NavLink>
+        <NavLink to="/debug" active={pathname.startsWith('/debug')}>
+          <span className="flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            <span>Debug</span>
+          </span>
+        </NavLink>
       </aside>
       <div className="flex flex-col min-h-screen">
         <AppBar onLogout={doLogout} />
@@ -259,12 +244,6 @@ export default function Layout() {
           // notify current page to refresh if it listens
           window.dispatchEvent(new CustomEvent('tx-created'));
         }} />
-        <SessionTimeoutModal
-          isOpen={showTimeoutModal}
-          onExtend={handleExtendSession}
-          onLogout={handleTimeoutLogout}
-          remainingSeconds={60}
-        />
       </div>
       <nav className="md:hidden fixed bottom-0 inset-x-0 surface-2 border-t flex justify-around p-2 pb-[calc(8px+env(safe-area-inset-bottom))] shadow-lg">
         <A href="/" active={pathname === '/'}>

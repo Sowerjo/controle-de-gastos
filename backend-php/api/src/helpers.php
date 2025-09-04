@@ -1,6 +1,18 @@
 <?php
 namespace Api;
 
+// Polyfill for PHP < 8.0
+if (!function_exists('str_starts_with')) {
+    function str_starts_with($haystack, $needle) {
+        return strpos($haystack, $needle) === 0;
+    }
+}
+if (!function_exists('str_ends_with')) {
+    function str_ends_with($haystack, $needle) {
+        return substr($haystack, -strlen($needle)) === $needle;
+    }
+}
+
 function env($key, $default = null) {
     static $cache = null;
     if ($cache === null) {

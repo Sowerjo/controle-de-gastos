@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste Local - Criação de Metas</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+        textarea { width: 100%; height: 150px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Teste Local - Sistema de Metas</h1>
+    
+    <div class="debug-section">
+        <h3>1. Login para Obter Token</h3>
+        <input type="email" id="email" placeholder="Email" value="admin@teste.com">
+        <input type="password" id="password" placeholder="Senha" value="123456">
+        <button onclick="doLogin()">Fazer Login</button>
+        <div id="loginResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>2. Verificar Token Atual</h3>
+        <button onclick="checkToken()">Verificar Token</button>
+        <div id="tokenResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>3. Testar Criação de Meta</h3>
+        <input type="text" id="goalName" placeholder="Nome da Meta" value="Meta Teste Local">
+        <input type="number" id="goalAmount" placeholder="Valor Alvo" value="1500">
+        <select id="goalType">
+            <option value="poupanca">Poupança</option>
+            <option value="investimento">Investimento</option>
+            <option value="emergencia">Emergência</option>
+        </select>
+        <button onclick="testCreateGoal()">Criar Meta</button>
+        <div id="goalResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>4. Listar Metas Existentes</h3>
+        <button onclick="listGoals()">Listar Metas</button>
+        <div id="goalsListResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>5. Logs de Debug</h3>
+        <textarea id="debugLogs" readonly></textarea>
+        <br>
+        <button onclick="clearLogs()">Limpar Logs</button>
+    </div>
+    
+    <script>
+        // Configuração da API local
+        const API_BASE = 'http://localhost:8080';
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logs = document.getElementById('debugLogs');
+            logs.value += `[${timestamp}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+        
+        async function doLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const result = document.getElementById('loginResult');
+            
+            if (!email || !password) {
+                result.innerHTML = '<span class="error">✗ Preencha email e senha</span>';
+                return;
+            }
+            
+            log('Tentando fazer login...');
+            log(`Email: ${email}`);
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                log(`Status do login: ${response.status}`);
+                const responseText = await response.text();
+                log(`Resposta do login: ${responseText}`);
+                
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    if (data.access_token) {
+                        sessionStorage.setItem('accessToken', data.access_token);
+                        result.innerHTML = '<span class="success">✓ Login realizado com sucesso!</span>';
+                        log('Token salvo no sessionStorage');
+                        checkToken(); // Auto-verificar token
+                    } else {
+                        result.innerHTML = '<span class="error">✗ Token não encontrado na resposta</span>';
+                        log('Token não encontrado na resposta do login');
+                    }
+                } else {
+                    result.innerHTML = `<span class="error">✗ Erro no login: ${responseText}</span>`;
+                    log(`Erro no login: ${response.status} - ${responseText}`);
+                }
+            } catch (error) {
+                result.innerHTML = `<span class="error">✗ Erro de rede: ${error.message}</span>`;
+                log('Erro de rede no login: ' + error.message);
+            }
+        }
+        
+        function checkToken() {
+            const token = sessionStorage.getItem('accessToken');
+            const result = document.getElementById('tokenResult');
+            
+            if (token) {
+                try {
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const exp = new Date(payload.exp * 1000);
+                    const now = new Date();
+                    
+                    if (exp > now) {
+                        result.innerHTML = `<span class="success">✓ Token válido até: ${exp.toLocaleString()}</span>`;
+                        log('Token válido encontrado');
+                    } else {
+                        result.innerHTML = `<span class="error">✗ Token expirado em: ${exp.toLocaleString()}</span>`;
+                        log('Token expirado');
+                    }
+                } catch (e) {
+                    result.innerHTML = `<span class="error">✗ Token inválido: ${e.message}</span>`;
+                    log('Erro ao decodificar token: ' + e.message);
+                }
+            } else {
+                result.innerHTML = '<span class="error">✗ Token não encontrado. Faça login primeiro.</span>';
+                log('Token não encontrado');
+            }
+        }
+        
+        async function testCreateGoal() {
+            const result = document.getElementById('goalResult');
+            const token = sessionStorage.getItem('accessToken');
+            
+            if (!token) {
+                result.innerHTML = '<span class="error">✗ Token não encontrado. Faça login primeiro.</span>';
+                log('Tentativa de criar meta sem token');
+                return;
+            }
+            
+            const goalData = {
+                name: document.getElementById('goalName').value || 'Meta Teste Local',
+                target_amount: parseFloat(document.getElementById('goalAmount').value) || 1500,
+                type: document.getElementById('goalType').value || 'poupanca'
+            };
+            
+            log('Iniciando criação de meta...');
+            log('Dados da meta: ' + JSON.stringify(goalData));
+            log('Token: ' + token.substring(0, 20) + '...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/goals`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(goalData)
+                });
+                
+                log(`Status da resposta: ${response.status}`);
+                log(`Headers da resposta: ${JSON.stringify([...response.headers.entries()])}`);
+                
+                const responseText = await response.text();
+                log(`Corpo da resposta: ${responseText}`);
+                
+                if (response.ok) {
+                    result.innerHTML = '<span class="success">✓ Meta criada com sucesso!</span>';
+                    log('Meta criada com sucesso');
+                    listGoals(); // Auto-atualizar lista
+                } else {
+                    result.innerHTML = `<span class="error">✗ Erro ${response.status}: ${responseText}</span>`;
+                    log(`Erro na criação: ${response.status} - ${responseText}`);
+                }
+            } catch (error) {
+                result.innerHTML = `<span class="error">✗ Erro de rede: ${error.message}</span>`;
+                log('Erro de rede: ' + error.message);
+            }
+        }
+        
+        async function listGoals() {
+            const result = document.getElementById('goalsListResult');
+            const token = sessionStorage.getItem('accessToken');
+            
+            if (!token) {
+                result.innerHTML = '<span class="error">✗ Token não encontrado. Faça login primeiro.</span>';
+                return;
+            }
+            
+            log('Listando metas...');
+            
+            try {
+                const response = await fetch(`${API_BASE}/v1/goals`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                log(`Status da listagem: ${response.status}`);
+                const responseText = await response.text();
+                log(`Resposta da listagem: ${responseText}`);
+                
+                if (response.ok) {
+                    const goals = JSON.parse(responseText);
+                    if (goals.length > 0) {
+                        let html = '<h4>Metas encontradas:</h4><ul>';
+                        goals.forEach(goal => {
+                            html += `<li><strong>${goal.name}</strong> - R$ ${goal.target_amount} (${goal.type})</li>`;
+                        });
+                        html += '</ul>';
+                        result.innerHTML = html;
+                    } else {
+                        result.innerHTML = '<span class="info">ℹ Nenhuma meta encontrada</span>';
+                    }
+                } else {
+                    result.innerHTML = `<span class="error">✗ Erro ao listar: ${responseText}</span>`;
+                }
+            } catch (error) {
+                result.innerHTML = `<span class="error">✗ Erro de rede: ${error.message}</span>`;
+                log('Erro de rede na listagem: ' + error.message);
+            }
+        }
+        
+        function clearLogs() {
+            document.getElementById('debugLogs').value = '';
+        }
+        
+        // Auto-verificar token ao carregar
+        window.onload = function() {
+            log('=== Teste Local de Metas Iniciado ===');
+            log('API Base: ' + API_BASE);
+            checkToken();
+        };
+    </script>
+</body>
+</html>

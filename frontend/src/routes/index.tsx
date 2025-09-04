@@ -17,6 +17,7 @@ import ImportWizard from '../pages/Import';
 import Reconcile from '../pages/Reconcile';
 import Recurring from '../pages/Recurring';
 import Profile from '../pages/Profile';
+import Debug from '../pages/Debug';
 import Layout from '../components/Layout';
 
 function PrivateRoute({ children }: { children: JSX.Element }) {
@@ -54,6 +55,7 @@ export default function AppRoutes() {
           <Route path="reconcile" element={<Reconcile />} />
           <Route path="recurring" element={<Recurring />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="debug" element={<Debug />} />
         </Route>
       </Routes>
     </Suspense>

@@ -124,7 +124,7 @@ function InlineMoney({ value, onChange }: { value: number; onChange: (v: number)
       <input className="input px-1 py-0.5 tnum w-24" value={val} onChange={(e)=>setVal(e.target.value)} onBlur={()=>{ setEditing(false); onChange(Number(val||0)); }} onKeyDown={(e)=>{ if(e.key==='Enter'){ setEditing(false); onChange(Number(val||0)); } if(e.key==='Escape'){ setEditing(false); setVal(String(value)); } }} autoFocus />
     </span>
   ) : (
-    <span className="cursor-text" onClick={()=>setEditing(true)}>{fmtCurrency(value)}</span>
+    <span className="cursor-text" onClick={()=>setEditing(true)}>{fmtCurrency(Number(value||0))}</span>
   );
 }
 

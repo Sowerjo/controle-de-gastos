@@ -10,8 +10,8 @@ interface UseSessionTimeoutOptions {
 }
 
 export function useSessionTimeout({
-  timeoutMinutes = 5,
-  warningMinutes = 1,
+  timeoutMinutes = 30,
+  warningMinutes = 5,
   onWarning,
   onTimeout
 }: UseSessionTimeoutOptions = {}) {
@@ -19,6 +19,9 @@ export function useSessionTimeout({
   const timeoutRef = useRef<number | null>(null);
   const warningRef = useRef<number | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
+
+  // TIMEOUT DESABILITADO - Hook não executa nenhuma funcionalidade de timeout
+  // Retorna apenas as funções necessárias sem implementação ativa
 
   const logout = useCallback(() => {
     try {
@@ -29,72 +32,18 @@ export function useSessionTimeout({
     navigate('/login');
   }, [navigate]);
 
+  // TODAS AS FUNCIONALIDADES DE TIMEOUT FORAM DESABILITADAS
+  // O hook agora apenas retorna funções vazias para manter compatibilidade
+  
   const resetTimers = useCallback(() => {
-    lastActivityRef.current = Date.now();
-    
-    // Clear existing timers
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-    if (warningRef.current) {
-      clearTimeout(warningRef.current);
-    }
-
-    // Set warning timer
-    const warningTime = (timeoutMinutes - warningMinutes) * 60 * 1000;
-    warningRef.current = setTimeout(() => {
-      onWarning?.();
-    }, warningTime);
-
-    // Set timeout timer
-    const timeoutTime = timeoutMinutes * 60 * 1000;
-    timeoutRef.current = setTimeout(() => {
-      onTimeout?.();
-      logout();
-    }, timeoutTime);
-  }, [timeoutMinutes, warningMinutes, onWarning, onTimeout, logout]);
+    // Função desabilitada - não faz nada
+  }, []);
 
   const extendSession = useCallback(() => {
-    resetTimers();
-  }, [resetTimers]);
+    // Função desabilitada - não faz nada
+  }, []);
 
-  useEffect(() => {
-    // Check if user is authenticated
-    const hasAuth = sessionStorage.getItem('hasAuth');
-    if (!hasAuth) return;
-
-    // Activity events to track
-    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
-    
-    const handleActivity = () => {
-      const now = Date.now();
-      // Only reset if more than 30 seconds have passed since last activity
-      if (now - lastActivityRef.current > 30000) {
-        resetTimers();
-      }
-    };
-
-    // Add event listeners
-    events.forEach(event => {
-      document.addEventListener(event, handleActivity, true);
-    });
-
-    // Initialize timers
-    resetTimers();
-
-    // Cleanup
-    return () => {
-      events.forEach(event => {
-        document.removeEventListener(event, handleActivity, true);
-      });
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-      if (warningRef.current) {
-        clearTimeout(warningRef.current);
-      }
-    };
-  }, [resetTimers]);
+  // useEffect removido - não monitora mais atividade do usuário
 
   return {
     extendSession,

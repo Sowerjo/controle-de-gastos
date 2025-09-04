@@ -289,7 +289,7 @@ export default function Transactions() {
                 {fmtDate(t.data)} · {t.categoria?.name || 'Sem categoria'} {t.conta?.name ? `· ${t.conta.name}` : ''}
               </div>
             </div>
-            <div className={`tnum text-sm ${t.tipo==='despesa' ? 'text-red-400' : 'text-emerald-400'}`}>{fmtCurrency(t.valor)}</div>
+            <div className={`tnum text-sm ${t.tipo==='despesa' ? 'text-red-400' : 'text-emerald-400'}`}>{fmtCurrency(Number(t.valor||0))}</div>
             <div className="ml-3 flex gap-2">
               <button className="text-xs text-[color:var(--text-dim)] hover:text-sky-300" onClick={()=>openEdit(t)}>Editar</button>
               <button className="text-xs text-[color:var(--text-dim)] hover:text-red-300" onClick={()=>removeTx(t.id)}>Excluir</button>

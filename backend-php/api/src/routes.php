@@ -777,15 +777,19 @@ $router->add('GET', '/api/v1/goals', function(){ Middleware::requireAuth(); $uid
     }
     $st=$pdo->prepare($q); $st->execute($args); $rows=$st->fetchAll();
     $today = new DateTime(date('Y-m-d'));
+    // Detect if transactions.goal_id exists to link contributions to goals
+    $hasGoalId = false; try { $c=$pdo->query("SHOW COLUMNS FROM `transactions` LIKE 'goal_id'"); $hasGoalId=(bool)$c->fetch(); } catch (\Throwable $e) {}
     foreach($rows as &$g){
         // Compute accumulated
         $initial = (float)($hasInitial? ($g['initial_amount'] ?? 0) : 0);
         $accumulated = $initial;
         $strategy = $hasStrategy? ($g['strategy'] ?? 'linear') : 'linear';
         if ($strategy === 'linear') {
-            // Sum contributions linked to this goal (RECEITA positive, DESPESA negative)
-            $st2=$pdo->prepare("SELECT COALESCE(SUM(CASE WHEN type='RECEITA' THEN amount ELSE -amount END),0) AS s FROM transactions WHERE user_id=? AND goal_id=?");
-            $st2->execute([$uid,$g['id']]); $accumulated += (float)$st2->fetchColumn();
+            // Sum only credit (RECEITA) transactions linked to this goal when goal_id is available
+            if ($hasGoalId) {
+                $st2=$pdo->prepare("SELECT COALESCE(SUM(amount),0) AS s FROM transactions WHERE user_id=? AND goal_id=? AND type='RECEITA'");
+                $st2->execute([$uid,$g['id']]); $accumulated += (float)$st2->fetchColumn();
+            }
         } else { // por_alocacao
             $cond=[]; $args2=[$uid];
             if ($hasAccount && !empty($g['account_id'])) { $cond[] = 'account_id=?'; $args2[] = $g['account_id']; }
@@ -806,6 +810,7 @@ $router->add('GET', '/api/v1/goals', function(){ Middleware::requireAuth(); $uid
             if ($hasPlanned && is_null($months_left) && ($g['planned_monthly_amount'] ?? null) !== null) { $suggested_monthly = (float)$g['planned_monthly_amount']; }
         }
         $g['accumulated'] = (float)$accumulated;
+        $g['current_amount'] = (float)$accumulated; // Frontend expects current_amount
         $g['remaining'] = (float)$remaining;
         $g['percent'] = (float)$percent;
         $g['months_left'] = $months_left;
@@ -824,11 +829,11 @@ $router->add('POST', '/api/v1/goals', function(){ Middleware::requireAuth(); $ui
     $target=(float)($in['target_amount']??0);
     $initial=(float)($in['initial_amount']??0);
     $strategy=$in['strategy']??'linear'; if(!in_array($strategy,['linear','por_alocacao'])) $strategy='linear';
-    $account_id=$in['account_id']??null; if($account_id!=='') $account_id=(int)$account_id; else $account_id=null;
-    $category_id=$in['category_id']??null; if($category_id!=='') $category_id=(int)$category_id; else $category_id=null;
+    $account_id=$in['account_id']??null; if($account_id!==null && $account_id!=='' && $account_id!==0) $account_id=(int)$account_id; else $account_id=null;
+    $category_id=$in['category_id']??null; if($category_id!==null && $category_id!=='' && $category_id!==0) $category_id=(int)$category_id; else $category_id=null;
     $target_date=$in['target_date']??($in['due_date']??null);
-    $planned=$in['planned_monthly_amount']??null; if($planned!=='') $planned=$planned!==null?(float)$planned:null;
-    $rec_day=$in['recurring_day']??null; if($rec_day!=='') $rec_day=$rec_day!==null?(int)$rec_day:null;
+    $planned=$in['planned_monthly_amount']??null; if($planned!==null && $planned!=='' && $planned!==0) $planned=(float)$planned; else $planned=null;
+    $rec_day=$in['recurring_day']??null; if($rec_day!==null && $rec_day!=='' && $rec_day!==0) $rec_day=(int)$rec_day; else $rec_day=null;
     $priority=$in['priority']??'media'; if(!in_array($priority,['baixa','media','alta'])) $priority='media';
     // Garantir que priority nunca seja null
     if($priority === null || $priority === '') $priority = 'media';
@@ -859,8 +864,8 @@ $router->add('PUT', '/api/v1/goals', function(){ Middleware::requireAuth(); $uid
     $in=json_decode(file_get_contents('php://input'),true)?:[]; $gid=(int)($in['id']??0); if(!$gid) json(['error'=>['message'=>'ID requerido']],422);
     $fields=[]; $args=[];
     foreach(['name','type','strategy','priority'] as $k){ if(isset($in[$k]) && $has($k)){ $fields[]="$k=?"; $v=$in[$k]; if($k==='type'&&!in_array($v,['poupanca','quitar_divida'])) $v='poupanca'; if($k==='strategy'&&!in_array($v,['linear','por_alocacao'])) $v='linear'; if($k==='priority'&&!in_array($v,['baixa','media','alta'])) $v='media'; $args[]=$v; } }
-    foreach(['target_amount','initial_amount','planned_monthly_amount'] as $k){ if(array_key_exists($k,$in) && $has($k)){ $fields[]="$k=?"; $args[]=$in[$k]!==null?(float)$in[$k]:null; } }
-    foreach(['account_id','category_id','recurring_day'] as $k){ if(array_key_exists($k,$in) && $has($k)){ $fields[]="$k=?"; $args[]=$in[$k]!==null? (int)$in[$k]: null; } }
+    foreach(['target_amount','initial_amount','planned_monthly_amount'] as $k){ if(array_key_exists($k,$in) && $has($k)){ $fields[]="$k=?"; $args[]=$in[$k]!==null && $in[$k]!=='' && $in[$k]!==0 ?(float)$in[$k]:null; } }
+    foreach(['account_id','category_id','recurring_day'] as $k){ if(array_key_exists($k,$in) && $has($k)){ $fields[]="$k=?"; $args[]=$in[$k]!==null && $in[$k]!=='' && $in[$k]!==0 ? (int)$in[$k]: null; } }
     if(array_key_exists('target_date',$in) || array_key_exists('due_date',$in)){ if($has('target_date')) { $fields[]='target_date=?'; $args[]=$in['target_date']??($in['due_date']??null); } elseif($has('due_date')) { $fields[]='due_date=?'; $args[]=$in['target_date']??($in['due_date']??null); } }
     if(array_key_exists('archived_at',$in) && $has('archived_at')){ $fields[]='archived_at=?'; $args[]=$in['archived_at']; }
     if(!count($fields)) json(['error'=>['message'=>'Nada a atualizar']],422);
@@ -877,15 +882,33 @@ $router->add('POST', '/api/v1/goals/contribute', function(){ Middleware::require
     if(!$gid||$amt<=0) json(['error'=>['message'=>'Dados inválidos']],422);
     $st=$pdo->prepare('SELECT * FROM goals WHERE id=? AND user_id=?'); $st->execute([$gid,$uid]); $g=$st->fetch(); if(!$g) json(['error'=>['message'=>'Meta não encontrada']],404);
     $accId = isset($in['account_id']) && $in['account_id']!==null && $in['account_id']!=='' ? (int)$in['account_id'] : ($g['account_id']??null);
-    if(!$accId) json(['error'=>['message'=>'Conta requerida para aporte']],422);
+    if(!$accId) json(['error'=>['message'=>'Conta destino requerida para aporte']],422);
+    $sourceAccId = isset($in['source_account_id']) && $in['source_account_id']!==null && $in['source_account_id']!=='' ? (int)$in['source_account_id'] : null;
+    if(!$sourceAccId) json(['error'=>['message'=>'Conta origem requerida para aporte']],422);
+    if($sourceAccId === $accId) json(['error'=>['message'=>'A conta origem deve ser diferente da conta destino']],422);
     $catId = isset($in['category_id']) && $in['category_id']!==null && $in['category_id']!=='' ? (int)$in['category_id'] : ($g['category_id']??null);
     $hasGoalId = false; try { $c=$pdo->query("SHOW COLUMNS FROM `transactions` LIKE 'goal_id'"); $hasGoalId=(bool)$c->fetch(); } catch (\Throwable $e) {}
-    if ($hasGoalId) {
-        $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,status,goal_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')
-            ->execute([$uid,$accId,'RECEITA',$amt,$date,'Aporte para meta: '.$g['name'],$catId,'CLEARED',$gid]);
-    } else {
+    
+    // Start transaction
+    $pdo->beginTransaction();
+    try {
+        // Create debit transaction in source account (do NOT link to goal to avoid canceling accumulation)
         $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,NOW())')
-            ->execute([$uid,$accId,'RECEITA',$amt,$date,'Aporte para meta: '.$g['name'],$catId,'CLEARED']);
+            ->execute([$uid,$sourceAccId,'DESPESA',$amt,$date,'Transferência para meta: '.$g['name'],$catId,'CLEARED']);
+        
+        // Create credit transaction in destination account
+        if ($hasGoalId) {
+            $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,status,goal_id,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')
+                ->execute([$uid,$accId,'RECEITA',$amt,$date,'Aporte para meta: '.$g['name'],$catId,'CLEARED',$gid]);
+        } else {
+            $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,NOW())')
+                ->execute([$uid,$accId,'RECEITA',$amt,$date,'Aporte para meta: '.$g['name'],$catId,'CLEARED']);
+        }
+        
+        $pdo->commit();
+    } catch (\Exception $e) {
+        $pdo->rollback();
+        json(['error'=>['message'=>'Erro ao processar transferência']],500);
     }
     json(['data'=>['ok'=>true]]);
 });
@@ -912,3 +935,78 @@ $router->add('GET', '/api/v1/recurring', function(){ Middleware::requireAuth(); 
 $router->add('POST', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $acc=(int)($in['account_id']??0); $type=strtoupper($in['type']??''); $amount=(float)($in['amount']??0); $desc=$in['description']??null; $cat=$in['category_id']??null; $payee=$in['payee_id']??null; $unit=$in['interval_unit']??'month'; $cnt=(int)($in['interval_count']??1); $next=$in['next_run']??date('Y-m-d'); $end=$in['end_date']??null; if(!$acc||!in_array($type,['RECEITA','DESPESA'])||$amount<=0) json(['error'=>['message'=>'Dados inválidos']],422); $pdo->prepare('INSERT INTO recurring_rules (user_id,account_id,type,amount,description,category_id,payee_id,interval_unit,interval_count,next_run,end_date,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$acc,$type,$amount,$desc,$cat,$payee,$unit,$cnt,$next,$end]); json(['data'=>['ok'=>true]]); });
 $router->add('PUT', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $rid=(int)($in['id']??0); if(!$rid) json(['error'=>['message'=>'ID requerido']],422); $fields=[];$args=[]; foreach(['account_id','type','amount','description','category_id','payee_id','interval_unit','interval_count','next_run','end_date'] as $k){ if(array_key_exists($k,$in)){ $fields[]="$k=?"; $args[]=$in[$k]; } } if(!count($fields)) json(['error'=>['message'=>'Nada a atualizar']],422); $args[]=$rid; $args[]=$uid; $pdo->prepare('UPDATE recurring_rules SET '.implode(',', $fields).' WHERE id=? AND user_id=?')->execute($args); json(['data'=>['ok'=>true]]); });
 $router->add('DELETE', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $rid=(int)($_GET['id']??0); $pdo->prepare('DELETE FROM recurring_rules WHERE id=? AND user_id=?')->execute([$rid,$uid]); json(['data'=>['ok'=>true]]); });
+
+// Debug endpoint to check and fix database schema
+$router->add('GET', '/api/v1/debug/schema', function(){
+    $pdo=DB::conn();
+    $result = [];
+    
+    try {
+        // Check if goal_id column exists
+        $stmt = $pdo->query("SHOW COLUMNS FROM transactions LIKE 'goal_id'");
+        $hasGoalId = (bool)$stmt->fetch();
+        $result['goal_id_exists'] = $hasGoalId;
+        
+        if (!$hasGoalId) {
+            $result['action'] = 'Adding goal_id column...';
+            
+            // Add the column
+            $pdo->exec("ALTER TABLE transactions ADD COLUMN goal_id INT NULL");
+            $result['column_added'] = true;
+            
+            // Add the foreign key constraint
+            try {
+                $pdo->exec("ALTER TABLE transactions ADD CONSTRAINT fk_tx_goal FOREIGN KEY (goal_id) REFERENCES goals(id) ON DELETE SET NULL");
+                $result['foreign_key_added'] = true;
+            } catch (Exception $e) {
+                $result['foreign_key_error'] = $e->getMessage();
+            }
+        }
+        
+        // Verify the column exists now
+        $stmt = $pdo->query("SHOW COLUMNS FROM transactions LIKE 'goal_id'");
+        $hasGoalId = (bool)$stmt->fetch();
+        $result['final_goal_id_exists'] = $hasGoalId;
+        
+        // Count transactions with goal_id
+        $stmt = $pdo->query("SELECT COUNT(*) FROM transactions WHERE goal_id IS NOT NULL");
+        $result['transactions_with_goal_id'] = (int)$stmt->fetchColumn();
+        
+        // List goals
+        $stmt = $pdo->query("SELECT id, name, target_amount, initial_amount FROM goals ORDER BY id");
+        $result['goals'] = $stmt->fetchAll();
+        
+        $result['status'] = 'success';
+        
+    } catch (Exception $e) {
+        $result['error'] = $e->getMessage();
+        $result['status'] = 'error';
+    }
+    
+    json(['data' => $result]);
+});
+
+// Debug endpoint to list transactions with goal_id
+$router->add('GET', '/api/v1/debug/goal-transactions', function(){
+    $pdo=DB::conn();
+    
+    try {
+        // Check if goal_id column exists first
+        $stmt = $pdo->query("SHOW COLUMNS FROM transactions LIKE 'goal_id'");
+        $hasGoalId = (bool)$stmt->fetch();
+        
+        if (!$hasGoalId) {
+            json(['error' => 'goal_id column does not exist'], 400);
+            return;
+        }
+        
+        // Get transactions with goal_id
+        $stmt = $pdo->query("SELECT t.id, t.type, t.amount, t.date, t.description, t.goal_id, g.name as goal_name FROM transactions t LEFT JOIN goals g ON g.id = t.goal_id WHERE t.goal_id IS NOT NULL ORDER BY t.goal_id, t.date DESC");
+        $transactions = $stmt->fetchAll();
+        
+        json(['data' => $transactions]);
+        
+    } catch (Exception $e) {
+        json(['error' => $e->getMessage()], 500);
+    }
+});

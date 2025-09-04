@@ -60,7 +60,7 @@ export default function Reconcile(){
           <div className="text-sm text-[color:var(--text-dim)] mb-2">Resumo</div>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between"><span>Itens marcados</span><span>{Object.values(selected).filter(Boolean).length}</span></div>
-            <div className="flex justify-between"><span>Total selecionado</span><span className="tnum">{fmtCurrency(selectedTotal)}</span></div>
+            <div className="flex justify-between"><span>Total selecionado</span><span className="tnum">{fmtCurrency(Number(selectedTotal||0))}</span></div>
             <div className="pt-2"><button className="btn-primary" onClick={finalize}>Finalizar conciliação</button></div>
           </div>
         </div>

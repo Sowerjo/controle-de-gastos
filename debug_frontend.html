@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Frontend - Criação de Meta</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .debug-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 5px; }
+        textarea { width: 100%; height: 100px; }
+        pre { background: #f5f5f5; padding: 10px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>Debug Frontend - Criação de Meta</h1>
+    
+    <div class="debug-section">
+        <h3>1. Verificar Token no SessionStorage</h3>
+        <button onclick="checkToken()">Verificar Token</button>
+        <div id="tokenResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>2. Testar Criação de Meta</h3>
+        <button onclick="testCreateGoal()">Criar Meta de Teste</button>
+        <div id="goalResult"></div>
+    </div>
+    
+    <div class="debug-section">
+        <h3>3. Logs de Debug</h3>
+        <textarea id="debugLogs" readonly></textarea>
+        <br>
+        <button onclick="clearLogs()">Limpar Logs</button>
+    </div>
+    
+    <script>
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logs = document.getElementById('debugLogs');
+            logs.value += `[${timestamp}] ${message}\n`;
+            logs.scrollTop = logs.scrollHeight;
+            console.log(message);
+        }
+        
+        function checkToken() {
+            const token = sessionStorage.getItem('accessToken');
+            const result = document.getElementById('tokenResult');
+            
+            if (token) {
+                try {
+                    // Decodificar JWT para verificar expiração
+                    const payload = JSON.parse(atob(token.split('.')[1]));
+                    const exp = new Date(payload.exp * 1000);
+                    const now = new Date();
+                    
+                    if (exp > now) {
+                        result.innerHTML = `<span class="success">✓ Token encontrado e válido até: ${exp.toLocaleString()}</span>`;
+                        log('Token válido encontrado');
+                    } else {
+                        result.innerHTML = `<span class="error">✗ Token expirado em: ${exp.toLocaleString()}</span>`;
+                        log('Token expirado');
+                    }
+                } catch (e) {
+                    result.innerHTML = `<span class="error">✗ Token inválido: ${e.message}</span>`;
+                    log('Erro ao decodificar token: ' + e.message);
+                }
+            } else {
+                result.innerHTML = '<span class="error">✗ Token não encontrado no sessionStorage</span>';
+                log('Token não encontrado');
+            }
+        }
+        
+        async function testCreateGoal() {
+            const result = document.getElementById('goalResult');
+            const token = sessionStorage.getItem('accessToken');
+            
+            if (!token) {
+                result.innerHTML = '<span class="error">✗ Token não encontrado. Faça login primeiro.</span>';
+                log('Tentativa de criar meta sem token');
+                return;
+            }
+            
+            const goalData = {
+                name: 'Meta de Teste Debug',
+                target_amount: 1000,
+                type: 'poupanca'
+            };
+            
+            log('Iniciando criação de meta...');
+            log('Dados da meta: ' + JSON.stringify(goalData));
+            log('Token: ' + token.substring(0, 20) + '...');
+            
+            try {
+                const response = await fetch('/api/v1/goals', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(goalData)
+                });
+                
+                log(`Status da resposta: ${response.status}`);
+                log(`Headers da resposta: ${JSON.stringify([...response.headers.entries()])}`);
+                
+                const responseText = await response.text();
+                log(`Corpo da resposta: ${responseText}`);
+                
+                if (response.ok) {
+                    result.innerHTML = '<span class="success">✓ Meta criada com sucesso!</span>';
+                    log('Meta criada com sucesso');
+                } else {
+                    result.innerHTML = `<span class="error">✗ Erro ${response.status}: ${responseText}</span>`;
+                    log(`Erro na criação: ${response.status} - ${responseText}`);
+                }
+            } catch (error) {
+                result.innerHTML = `<span class="error">✗ Erro de rede: ${error.message}</span>`;
+                log('Erro de rede: ' + error.message);
+            }
+        }
+        
+        function clearLogs() {
+            document.getElementById('debugLogs').value = '';
+        }
+        
+        // Auto-verificar token ao carregar
+        window.onload = function() {
+            log('Página de debug carregada');
+            checkToken();
+        };
+    </script>
+</body>
+</html>
