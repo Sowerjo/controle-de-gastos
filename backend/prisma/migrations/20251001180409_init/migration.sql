@@ -40,6 +40,8 @@ CREATE TABLE "transactions" (
     "user_id" INTEGER NOT NULL,
     "account_id" INTEGER NOT NULL,
     "category_id" INTEGER,
+    "payment_status" TEXT,
+    "recurring_rule_id" INTEGER,
     "created_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" DATETIME NOT NULL,
     CONSTRAINT "transactions_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users" ("id") ON DELETE CASCADE ON UPDATE CASCADE,

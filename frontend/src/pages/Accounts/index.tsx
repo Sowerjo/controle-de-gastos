@@ -63,15 +63,29 @@ export default function Accounts() {
   return (
     <div className="p-4 text-[color:var(--text)]">
       <h1 className="heading text-2xl mb-4">Contas</h1>
-      <form onSubmit={add} className="flex flex-wrap gap-2 mb-4 items-center">
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome da conta" className="input px-2 py-1 text-sm" required />
-        <select value={type} onChange={(e) => setType(e.target.value)} className="input px-2 py-1 text-sm">
-          {TYPES.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </select>
-        <input inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} className="input px-2 py-1 text-sm" placeholder="Saldo inicial" />
-        <button className="btn-primary text-sm">Adicionar</button>
+      <form onSubmit={add} className="grid md:grid-cols-3 gap-3 mb-4 items-end">
+        <div>
+          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Nome da conta</label>
+          <input aria-label="Nome da conta" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex.: Conta Principal" className="input px-2 py-2 text-sm w-full" required />
+          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Identificação da conta nas telas e relatórios.</div>
+        </div>
+        <div>
+          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Tipo de conta</label>
+          <select aria-label="Tipo de conta" value={type} onChange={(e) => setType(e.target.value)} className="input px-2 py-2 text-sm w-full">
+            {TYPES.map((t) => (
+              <option key={t.value} value={t.value}>{t.label}</option>
+            ))}
+          </select>
+          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Selecione o tipo: corrente, poupança, cartão etc.</div>
+        </div>
+        <div>
+          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Saldo inicial</label>
+          <input aria-label="Saldo inicial" inputMode="decimal" value={opening} onChange={(e) => setOpening(e.target.value)} className="input px-2 py-2 text-sm w-full" placeholder="Ex.: 500,00" />
+          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Valor atual ao começar a usar o sistema.</div>
+        </div>
+        <div className="md:col-span-3">
+          <button className="btn-primary text-sm">Adicionar conta</button>
+        </div>
       </form>
 
       {/* Mobile cards */}

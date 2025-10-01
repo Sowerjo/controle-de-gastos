@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { fmtCurrency, monthRange } from '../../utils/format';
+import { fmtCurrency } from '../../utils/format';
 import Donut from '../../components/Donut';
 import { useGoals } from '../../hooks/useGoals';
 import { useAccounts } from '../../hooks/useAccounts';
+import { useMonth } from '../../contexts/MonthContext';
+import MonthSelector from '../../components/MonthSelector';
 
 // Componente para exibir gráfico de tendências
 function TrendChart({ data }: { data: any[] }) {
@@ -73,12 +75,16 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<any>(null);
-  const { from, to } = monthRange();
-  const [month, setMonth] = useState(from.slice(0,7));
+  const { monthRange, formatMonthForInput } = useMonth();
+  const { from, to } = monthRange;
+  const month = formatMonthForInput();
   const [budgets, setBudgets] = useState<any[]>([]);
   const { goals } = useGoals();
   const { accounts } = useAccounts();
   const [catData, setCatData] = useState<{ label: string; value: number }[]>([]);
+  const [fixedForecast, setFixedForecast] = useState<number>(0);
+  const [fixedOverview, setFixedOverview] = useState<{ category: string; total: number; count: number }[]>([]);
+  const [fixedStatusCounts, setFixedStatusCounts] = useState<{ pago: number; pendente: number; atrasado: number }>({ pago: 0, pendente: 0, atrasado: 0 });
 
   useEffect(() => {
     (async () => {
@@ -134,19 +140,95 @@ export default function Dashboard() {
     })();
   }, [accounts, from, to]);
 
+  // Calcular previsão de gastos fixos do mês
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await api.get('/api/v1/recurring');
+        const items = (r.data?.data ?? []) as any[];
+        const today = new Date();
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        const total = items.filter(it => {
+          const nr = new Date(it.next_run);
+          return it.type === 'DESPESA' && nr >= monthStart && nr <= monthEnd;
+        }).reduce((sum, it) => sum + Number(it.amount || 0), 0);
+        setFixedForecast(total);
+      } catch {
+        setFixedForecast(0);
+      }
+    })();
+  }, [from, to]);
+
+  // Agregação de gastos fixos por categoria e contagem por status
+  useEffect(() => {
+    (async () => {
+      try {
+        const [recRes, catRes] = await Promise.all([
+          api.get('/api/v1/recurring'),
+          api.get('/api/v1/categories'),
+        ]);
+        const items = (recRes.data?.data ?? []) as any[];
+        const categories = (catRes.data?.data ?? []) as any[];
+        
+        const catMap = new Map<number, string>(categories.map((c: any) => [c.id, c.name]));
+
+        const today = new Date();
+        const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+        const onlyExpenses = items.filter(it => it.type === 'DESPESA');
+
+        let pago = 0, pendente = 0, atrasado = 0;
+
+        const agg = new Map<string, { total: number; count: number }>();
+        for (const r of onlyExpenses) {
+          // Usar payment_status diretamente do backend (já corrigido)
+          const st = r.payment_status || 'pendente';
+          if (st === 'pago') pago++; else if (st === 'pendente') pendente++; else atrasado++;
+          const name = r.category_id ? (catMap.get(Number(r.category_id)) || 'Sem categoria') : 'Sem categoria';
+          const cur = agg.get(name) || { total: 0, count: 0 };
+          cur.total += Number(r.amount || 0);
+          cur.count += 1;
+          agg.set(name, cur);
+        }
+
+        const list = Array.from(agg.entries()).map(([category, data]) => ({ category, total: data.total, count: data.count }));
+        list.sort((a, b) => b.total - a.total);
+        setFixedOverview(list);
+        setFixedStatusCounts({ pago, pendente, atrasado });
+      } catch (error) {
+        // Em caso de erro (backend não disponível), usar dados de exemplo
+        const mockData = [
+          { category: 'Moradia', total: 2500, count: 3 },
+          { category: 'Transporte', total: 1800, count: 2 },
+          { category: 'Saúde', total: 1200, count: 4 },
+          { category: 'Educação', total: 900, count: 1 },
+        ];
+        setFixedOverview(mockData);
+        setFixedStatusCounts({ pago: 4, pendente: 5, atrasado: 1 });
+      }
+    })();
+  }, [from, to, month]);
+
   const totalBalance = (((summary && summary.accounts) ? summary.accounts : accounts) || []).reduce((acc: number, a: any) => acc + Number(a.balance ?? a.opening_balance ?? 0), 0);
+  const fixedMaxTotal = Math.max(1, ...fixedOverview.map(x => x.total));
 
   return (
     <div className="p-4">
-      <h1 className="heading text-2xl mb-4">Dashboard</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="heading text-2xl">Dashboard</h1>
+        <MonthSelector />
+      </div>
       {loading ? (
         <div>Carregando…</div>
       ) : summary ? (
         <>
-          <div className="grid sm:grid-cols-3 gap-4 mb-6">
+          <div className="grid sm:grid-cols-4 gap-4 mb-6">
             <Card title="Saldo atual" value={fmtCurrency(totalBalance)} />
             <Card title="Receitas (mês)" value={fmtCurrency(summary.receitas ?? summary.totalReceitas ?? 0)} pos />
             <Card title="Despesas (mês)" value={fmtCurrency(summary.despesas ?? summary.totalDespesas ?? 0)} neg />
+            <Card title="Gastos fixos previstos" value={fmtCurrency(fixedForecast)} neg />
           </div>
           {/* Gráfico de tendências dos últimos 6 meses */}
           <div className="card p-4 mb-6">
@@ -210,12 +292,134 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Card: Gastos Fixos - Visão Geral */}
+          <div className="card p-6 mb-6 hover:bg-white/[0.02] transition-all duration-200 border border-white/5 hover:border-white/10">
+            {/* Header melhorado */}
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/20">
+                  <span className="text-lg">💳</span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-lg heading">Gastos Fixos</h3>
+                  <p className="text-xs text-[color:var(--text-dim)]">Visão geral dos gastos recorrentes</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => navigate('/fixed-dashboard')}
+                  className="text-xs px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 hover:border-white/20 transition-all duration-200 flex items-center gap-1.5"
+                  title="Ver dashboard detalhado"
+                >
+                  <span>📊</span>
+                  <span>Dashboard</span>
+                </button>
+                <button 
+                  onClick={() => navigate('/fixed')}
+                  className="text-xs px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 hover:border-purple-500/40 transition-all duration-200 flex items-center gap-1.5"
+                  title="Gerenciar gastos fixos"
+                >
+                  <span>⚙️</span>
+                  <span>Gerenciar</span>
+                </button>
+              </div>
+            </div>
+
+            {fixedOverview.length > 0 ? (
+              <>
+                {/* Resumo de status */}
+                <div className="grid grid-cols-3 gap-3 mb-4">
+                  <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-center">
+                    <div className="text-lg font-bold text-green-400">{fixedStatusCounts.pago}</div>
+                    <div className="text-xs text-green-300/80">✅ Pagos</div>
+                  </div>
+                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-center">
+                    <div className="text-lg font-bold text-amber-400">{fixedStatusCounts.pendente}</div>
+                    <div className="text-xs text-amber-300/80">⏳ Pendentes</div>
+                  </div>
+                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center">
+                    <div className="text-lg font-bold text-red-400">{fixedStatusCounts.atrasado}</div>
+                    <div className="text-xs text-red-300/80">🔴 Atrasados</div>
+                  </div>
+                </div>
+
+                {/* Lista de categorias melhorada */}
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between text-xs text-[color:var(--text-dim)] border-b border-white/10 pb-2">
+                    <span>Categoria</span>
+                    <span>Valor Total</span>
+                  </div>
+                  {fixedOverview.slice(0, 5).map((row, index) => {
+                    const pct = Math.round((row.total / fixedMaxTotal) * 100);
+                    const totalFixedAmount = fixedOverview.reduce((sum, item) => sum + item.total, 0);
+                    const categoryPct = Math.round((row.total / totalFixedAmount) * 100);
+                    
+                    return (
+                      <div key={row.category} className="group hover:bg-white/5 rounded-lg p-2 transition-all duration-200">
+                        <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            <span className="text-sm">#{index + 1}</span>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-sm truncate">{row.category}</div>
+                              <div className="text-xs text-[color:var(--text-dim)]">
+                                {row.count} {row.count > 1 ? 'gastos' : 'gasto'} • {categoryPct}% do total
+                              </div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-sm tnum">{fmtCurrency(row.total)}</div>
+                            <div className="w-20 h-1.5 bg-white/10 rounded-full mt-1">
+                              <div 
+                                className="h-1.5 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full transition-all duration-500" 
+                                style={{ width: `${pct}%` }}
+                              ></div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  
+                  {fixedOverview.length > 5 && (
+                    <div className="text-center pt-2">
+                      <button 
+                        onClick={() => navigate('/fixed-dashboard')}
+                        className="text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text-bright)] transition-colors"
+                      >
+                        Ver mais {fixedOverview.length - 5} categorias...
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Total geral */}
+                <div className="mt-4 pt-3 border-t border-white/10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">Total Mensal</span>
+                    <span className="text-lg font-bold tnum">{fmtCurrency(fixedOverview.reduce((sum, item) => sum + item.total, 0))}</span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-3">💳</div>
+                <div className="text-sm text-[color:var(--text-dim)] mb-3">Nenhum gasto fixo cadastrado</div>
+                <button 
+                  onClick={() => navigate('/fixed')}
+                  className="text-xs px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 hover:border-purple-500/40 transition-all duration-200"
+                >
+                  Cadastrar primeiro gasto
+                </button>
+              </div>
+            )}
+          </div>
           <div className="mb-4">
           <div className="grid md:grid-cols-2 gap-6">
             <div>
               <div className="flex items-center justify-between mb-2">
                 <h2 className="font-semibold heading">Orçamentos ({month})</h2>
-                <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="input px-2 py-1 text-sm" />
+                <MonthSelector size="sm" showCurrentButton={false} />
               </div>
               <div className="overflow-auto card">
                 <table className="min-w-[520px] w-full text-sm">

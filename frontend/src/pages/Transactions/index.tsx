@@ -1,7 +1,10 @@
 import React from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api from '../../services/api';
-import { fmtCurrency, fmtDate, monthRange } from '../../utils/format';
+import { fmtCurrency, fmtDate } from '../../utils/format';
+import { notifyAccountsUpdate } from '../../hooks/useAccounts';
+import { useMonth } from '../../contexts/MonthContext';
+import MonthSelector from '../../components/MonthSelector';
 
 type Tx = {
   id: number;
@@ -16,6 +19,7 @@ type Tx = {
 
 export default function Transactions() {
   const [search] = useSearchParams();
+  const { monthRange: period } = useMonth();
   const [loading, setLoading] = React.useState(false);
   const [items, setItems] = React.useState<Tx[]>([]);
   const [page, setPage] = React.useState(1);
@@ -23,13 +27,6 @@ export default function Transactions() {
 
   const [accounts, setAccounts] = React.useState<any[]>([]);
   const [categories, setCategories] = React.useState<any[]>([]);
-
-  const [period, setPeriod] = React.useState(() => {
-    const from = search.get('from');
-    const to = search.get('to');
-    if (from && to) return { from, to };
-    return monthRange();
-  });
   const [accountId, setAccountId] = React.useState<number | ''>(() => {
     const aid = search.get('accountId');
     return aid ? Number(aid) : '';
@@ -39,6 +36,8 @@ export default function Transactions() {
   const [q, setQ] = React.useState('');
   const [editing, setEditing] = React.useState<Tx | null>(null);
   const [form, setForm] = React.useState<any>({});
+  const [savingEdit, setSavingEdit] = React.useState(false);
+  const [editError, setEditError] = React.useState<string>('');
 
   React.useEffect(() => {
     (async () => {
@@ -56,14 +55,25 @@ export default function Transactions() {
   // Listen for new transaction events to refresh the list
   React.useEffect(() => {
     const handleTxCreated = () => {
+      // Reset pagination state and fetch fresh data
       setItems([]);
       setPage(1);
       setHasMore(true);
+      // Force a complete refresh by calling fetchPage with page 1 and replace=true
+      setTimeout(() => fetchPage(1, true), 100);
+    };
+
+    const handleTxUpdated = () => {
+      // For updates, just refresh the current page to maintain position
       fetchPage(1, true);
     };
 
     window.addEventListener('tx-created', handleTxCreated);
-    return () => window.removeEventListener('tx-created', handleTxCreated);
+    window.addEventListener('tx-updated', handleTxUpdated);
+    return () => {
+      window.removeEventListener('tx-created', handleTxCreated);
+      window.removeEventListener('tx-updated', handleTxUpdated);
+    };
   }, [period.from, period.to, accountId, tipo, categoriaId, q]);
 
   // When URL query changes, sync filters (from/to/accountId/categoryId)
@@ -73,9 +83,7 @@ export default function Transactions() {
     const aid = search.get('accountId');
     const cid = search.get('categoryId');
     
-    if (from && to) {
-      setPeriod({ from, to });
-    }
+    // Período agora é gerenciado pelo contexto global
     if (aid) {
       setAccountId(Number(aid));
     }
@@ -104,15 +112,34 @@ export default function Transactions() {
   const res = await api.get('/api/v1/transactions', { params });
   const payload = res.data?.data ?? res.data ?? {};
   const raw: any[] = (payload.items ?? payload) as any[];
+  const accName = (id?: number) => {
+    if (!id && id !== 0) return '';
+    const a = accounts.find((x:any) => Number(x.id) === Number(id));
+    return a?.name ?? '';
+  };
+  const catName = (id?: number) => {
+    if (!id && id !== 0) return '';
+    const c = categories.find((x:any) => Number(x.id) === Number(id));
+    return c?.name ?? '';
+  };
   const list: Tx[] = raw.map((r:any) => ({
     id: r.id,
     descricao: r.descricao ?? r.description ?? '',
     data: r.data ?? r.date ?? '',
     valor: r.valor ?? r.amount ?? 0,
     tipo: (r.tipo ?? r.type ?? '').toLowerCase() === 'despesa' || (r.tipo ?? r.type) === 'DESPESA' ? 'despesa' : 'receita',
-    categoria: r.categoria ?? (r.category ? { id: r.category.id, name: r.category.name } : r.category_id ? { id: r.category_id, name: r.category_name ?? '' } : undefined) ?? null,
-    payee: r.payee ?? (r.payee_id ? { id: r.payee_id, name: r.payee_name ?? '' } : undefined) ?? null,
-    conta: r.conta ?? (r.account ? { id: r.account.id, name: r.account.name } : r.account_id ? { id: r.account_id, name: r.account_name ?? '' } : undefined) ?? null,
+    categoria: r.categoriaId ? { 
+      id: r.categoriaId, 
+      name: r.categoria_name || catName(r.categoriaId) || 'Categoria não encontrada' 
+    } : null,
+    payee: (r.payeeId || r.payee_name) ? { 
+      id: r.payeeId || 0, 
+      name: r.payee_name || 'Favorecido não encontrado' 
+    } : null,
+    conta: r.contaId ? { 
+      id: r.contaId, 
+      name: r.conta_name || accName(r.contaId) || 'Conta não encontrada' 
+    } : null,
   }));
   const next = replace ? list : [...items, ...list];
   setItems(next);
@@ -149,6 +176,9 @@ export default function Transactions() {
   }
 
   async function saveEdit() {
+    if (!confirm('Confirmar alterações?')) return;
+    setSavingEdit(true);
+    setEditError('');
     const amountNum = (() => {
       const s = String(form.valor ?? '').trim();
       if (!s) return 0;
@@ -188,63 +218,25 @@ export default function Transactions() {
     };
     try {
       await api.put('/api/v1/transactions', payload);
-      setItems(prev => prev.map(t => t.id === form.id ? {
-        ...t,
-        descricao: form.descricao,
-        data: form.data,
-        valor: adjustedAmount,
-        tipo: adjustedType,
-        conta: form.accountId ? { id: Number(form.accountId), name: accounts.find(a => a.id === Number(form.accountId))?.name || t.conta?.name || '' } : (form.accountId === '' ? null : t.conta ?? null),
-        categoria: form.categoryId ? { id: Number(form.categoryId), name: categories.find(c => c.id === Number(form.categoryId))?.name || t.categoria?.name || '' } : (form.categoryId === '' ? null : t.categoria ?? null),
-        payee: form.payeeName ? { id: t.payee?.id || 0, name: form.payeeName } : (form.payeeName === '' ? null : t.payee ?? null),
-      } : t));
+      // Remove a atualização local do estado para evitar duplicação
+      // O evento tx-updated irá fazer o refresh da página
+      window.dispatchEvent(new Event('tx-updated'));
+      notifyAccountsUpdate();
       setEditing(null);
     } catch (e) {
-      alert('Falha ao salvar');
+      setEditError('Falha ao salvar. Verifique os dados e tente novamente.');
+    } finally {
+      setSavingEdit(false);
     }
   }
 
-  function changeMonth(offset: number) {
-    // Parse the current period date more reliably
-    const currentDate = new Date(period.from + 'T00:00:00');
-    
-    // Calculate new month/year
-    const newYear = currentDate.getFullYear();
-    const newMonth = currentDate.getMonth() + offset;
-    
-    // Create new date with proper month/year handling
-    const targetDate = new Date(newYear, newMonth, 1);
-    
-    setPeriod(monthRange(targetDate));
-  }
+
 
   return (
     <div className="p-4">
       <div className="flex items-center justify-between mb-3">
         <h1 className="text-lg font-semibold">Transações</h1>
-        <div className="flex gap-2 items-center">
-           <button className="px-2 py-1 rounded border border-white/10 hover:bg-white/5" onClick={() => changeMonth(-1)}>◀</button>
-           <input 
-             type="month" 
-             className="input px-2 py-1 text-sm min-w-[140px]" 
-             value={period.from.slice(0, 7)} 
-             onChange={(e) => {
-               if (e.target.value) {
-                 const [year, month] = e.target.value.split('-');
-                 const targetDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-                 setPeriod(monthRange(targetDate));
-               }
-             }}
-           />
-           <button className="px-2 py-1 rounded border border-white/10 hover:bg-white/5" onClick={() => changeMonth(1)}>▶</button>
-           <button 
-             className="px-2 py-1 rounded border border-white/10 hover:bg-white/5 text-xs" 
-             onClick={() => setPeriod(monthRange())}
-             title="Mês atual"
-           >
-             Hoje
-           </button>
-         </div>
+        <MonthSelector />
       </div>
 
       <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1">
@@ -303,89 +295,129 @@ export default function Transactions() {
 
       {editing && (
         <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50" onClick={()=>setEditing(null)}>
-          <div className="bg-[color:var(--card)] w-full sm:max-w-lg sm:rounded shadow-xl" onClick={(e)=>e.stopPropagation()}>
-            <div className="p-4 border-b border-white/10 font-semibold flex items-center justify-between">
-              <span>Editar transação</span>
+          <div className="bg-[color:var(--card)] w-full sm:max-w-2xl sm:rounded shadow-xl max-h-[90vh] overflow-auto" onClick={(e)=>e.stopPropagation()}>
+            <div className="sticky top-0 bg-[color:var(--card)] p-4 border-b border-white/10 font-semibold flex items-center justify-between">
+              <span>Editar Transação</span>
               <button className="text-sm text-[color:var(--text-dim)] hover:text-[color:var(--text)]" onClick={()=>setEditing(null)}>×</button>
             </div>
-            <div className="p-4 space-y-4 text-sm">
-              {/* Tipo e valor em destaque */}
-              <div className="flex items-center gap-3 mb-2">
-                <div className="flex-1">
-                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Tipo</div>
-                  <div className="flex rounded-md overflow-hidden border border-white/10">
-                    <button 
-                      className={`flex-1 py-2 px-3 ${form.tipo === 'receita' ? 'bg-emerald-600 text-white' : 'hover:bg-white/5'}`}
-                      onClick={() => setForm({...form, tipo: 'receita'})}
-                    >
-                      Receita
-                    </button>
-                    <button 
-                      className={`flex-1 py-2 px-3 ${form.tipo === 'despesa' ? 'bg-rose-600 text-white' : 'hover:bg-white/5'}`}
-                      onClick={() => setForm({...form, tipo: 'despesa'})}
-                    >
-                      Despesa
-                    </button>
+            <div className="p-6 space-y-6">
+              {/* Seção: Valor e Tipo */}
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-[color:var(--text-dim)]">Valor e Tipo</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Valor:</label>
+                    <input 
+                      className="input w-full text-lg py-3 tnum" 
+                      value={form.valor||''} 
+                      onChange={(e)=>setForm({...form, valor:e.target.value})} 
+                      placeholder="0,00"
+                      inputMode="decimal"
+                      autoFocus
+                    />
+                    <div className="text-xs text-[color:var(--text-dim)] mt-1">Use vírgula para decimais (ex: 30,50)</div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Tipo:</label>
+                    <div className="flex rounded-md overflow-hidden border border-white/10">
+                      <button 
+                        type="button"
+                        className={`flex-1 py-3 px-3 text-sm font-medium transition-colors ${form.tipo === 'receita' ? 'bg-emerald-600 text-white' : 'hover:bg-white/5'}`}
+                        onClick={() => setForm({...form, tipo: 'receita'})}
+                      >
+                        Receita
+                      </button>
+                      <button 
+                        type="button"
+                        className={`flex-1 py-3 px-3 text-sm font-medium transition-colors ${form.tipo === 'despesa' ? 'bg-rose-600 text-white' : 'hover:bg-white/5'}`}
+                        onClick={() => setForm({...form, tipo: 'despesa'})}
+                      >
+                        Despesa
+                      </button>
+                    </div>
                   </div>
                 </div>
-                <div className="flex-1">
-                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Valor</div>
-                  <input 
-                    className="input w-full text-lg py-1 tnum" 
-                    value={form.valor||''} 
-                    onChange={(e)=>setForm({...form, valor:e.target.value})} 
-                    placeholder="0,00"
-                    inputMode="decimal"
-                    autoFocus
-                  />
-                  <div className="text-xs text-[color:var(--text-dim)] mt-1">Use valores negativos para despesas</div>
+              </div>
+              
+              {/* Seção: Data e Status */}
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-[color:var(--text-dim)]">Data e Status</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Data:</label>
+                    <input type="date" className="input w-full py-2" value={form.data||''} onChange={(e)=>setForm({...form, data:e.target.value})} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Status:</label>
+                    <select className="input w-full py-2" value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})}>
+                      <option value="CLEARED">Compensada</option>
+                      <option value="PENDING">Pendente</option>
+                      <option value="RECONCILED">Conferida</option>
+                    </select>
+                  </div>
                 </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Data</div>
-                  <input type="date" className="input w-full" value={form.data||''} onChange={(e)=>setForm({...form, data:e.target.value})} />
-                </div>
-                <div>
-                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Status</div>
-                  <select className="input w-full" value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})}>
-                    <option value="CLEARED">Compensada</option>
-                    <option value="PENDING">Pendente</option>
-                    <option value="RECONCILED">Conferida</option>
-                  </select>
+              {/* Seção: Descrição */}
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-[color:var(--text-dim)]">Descrição</div>
+                <input className="input w-full py-2" placeholder="Descrição da transação" value={form.descricao||''} onChange={(e)=>setForm({...form, descricao:e.target.value})} />
+              </div>
+              
+              {/* Seção: Conta e Categoria */}
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-[color:var(--text-dim)]">Conta e Categoria</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Conta:</label>
+                    <select className="input w-full py-2" value={form.accountId||''} onChange={(e)=>setForm({...form, accountId:e.target.value?Number(e.target.value):''})}>
+                      <option value="">Selecione uma conta…</option>
+                      {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Categoria:</label>
+                    <select className="input w-full py-2" value={form.categoryId||''} onChange={(e)=>setForm({...form, categoryId:e.target.value?Number(e.target.value):''})}>
+                      <option value="">Selecione uma categoria…</option>
+                      {categories.map((c:any)=> (<option key={c.id} value={c.id}>{c.name}</option>))}
+                    </select>
+                  </div>
                 </div>
               </div>
               
-              <div>
-                <div className="text-xs text-[color:var(--text-dim)] mb-1">Descrição</div>
-                <input className="input w-full" value={form.descricao||''} onChange={(e)=>setForm({...form, descricao:e.target.value})} />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Conta</div>
-                  <select className="input w-full" value={form.accountId||''} onChange={(e)=>setForm({...form, accountId:e.target.value?Number(e.target.value):''})}>                    <option value="">—</option>
-                    {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <div className="text-xs text-[color:var(--text-dim)] mb-1">Categoria</div>
-                  <select className="input w-full" value={form.categoryId||''} onChange={(e)=>setForm({...form, categoryId:e.target.value?Number(e.target.value):''})}>                    <option value="">—</option>
-                    {categories.map((c:any)=> (<option key={c.id} value={c.id}>{c.name}</option>))}
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <div className="text-xs text-[color:var(--text-dim)] mb-1">Favorecido</div>
-                <input className="input w-full" value={form.payeeName||''} onChange={(e)=>setForm({...form, payeeName:e.target.value})} />
+              {/* Seção: Favorecido */}
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-[color:var(--text-dim)]">Favorecido</div>
+                <input className="input w-full py-2" placeholder="Nome do favorecido" value={form.payeeName||''} onChange={(e)=>setForm({...form, payeeName:e.target.value})} />
               </div>
             </div>
-            <div className="p-4 border-t border-white/10 flex justify-end gap-2">
-              <button className="px-4 py-2 rounded border border-white/10 hover:bg-white/5" onClick={()=>setEditing(null)}>Cancelar</button>
-              <button className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white" onClick={saveEdit}>Salvar</button>
-            </div>
+            {editError && (
+               <div className="px-6 pb-2 text-sm text-red-400 bg-red-50/10 border border-red-500/20 rounded-md p-3">{editError}</div>
+             )}
+             <div className="sticky bottom-0 bg-[color:var(--card)] p-6 border-t border-white/10 flex justify-end gap-3">
+               <button 
+                 className="px-6 py-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors font-medium" 
+                 onClick={()=>setEditing(null)} 
+                 disabled={savingEdit}
+               >
+                 Cancelar
+               </button>
+               <button 
+                  className="px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors font-medium disabled:opacity-50" 
+                  onClick={saveEdit} 
+                  disabled={savingEdit}
+                >
+                  {savingEdit ? (
+                    <div className="flex items-center justify-center gap-2">
+                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Salvando…
+                    </div>
+                  ) : 'Salvar Alterações'}
+                </button>
+             </div>
           </div>
         </div>
       )}

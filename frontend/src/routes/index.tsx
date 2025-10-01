@@ -14,10 +14,10 @@ import Budgets from '../pages/Budgets';
 import Goals from '../pages/Goals';
 import Reports from '../pages/Reports';
 import ImportWizard from '../pages/Import';
-import Reconcile from '../pages/Reconcile';
-import Recurring from '../pages/Recurring';
 import Profile from '../pages/Profile';
 import Debug from '../pages/Debug';
+import FixedExpenses from '../pages/Fixed';
+import FixedDashboard from '../pages/FixedDashboard';
 import Layout from '../components/Layout';
 
 function PrivateRoute({ children }: { children: JSX.Element }) {
@@ -52,9 +52,9 @@ export default function AppRoutes() {
           <Route path="goals" element={<Goals />} />
           <Route path="reports" element={<Reports />} />
           <Route path="import" element={<ImportWizard />} />
-          <Route path="reconcile" element={<Reconcile />} />
-          <Route path="recurring" element={<Recurring />} />
           <Route path="profile" element={<Profile />} />
+          <Route path="fixed" element={<FixedExpenses />} />
+          <Route path="fixed-dashboard" element={<FixedDashboard />} />
           <Route path="debug" element={<Debug />} />
         </Route>
       </Routes>

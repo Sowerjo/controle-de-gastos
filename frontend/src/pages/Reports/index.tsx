@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
+import { useMonth } from '../../contexts/MonthContext';
+import MonthSelector from '../../components/MonthSelector';
 
 type Row = { name: string; type: 'RECEITA'|'DESPESA'; total: number };
 type TrendData = { month: string; receitas: number; despesas: number; saldo: number };
 type TopItem = { name: string; total: number; percentage: number };
 
 export default function Reports() {
+  const { monthRange } = useMonth();
   const [tab, setTab] = useState<'category'|'payee'|'tag'|'trends'|'insights'>('category');
-  const [from, setFrom] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10));
-  const [to, setTo] = useState(new Date().toISOString().slice(0,10));
+  const from = monthRange.from;
+  const to = monthRange.to;
   const [rows, setRows] = useState<Row[]>([]);
   const [trendData, setTrendData] = useState<TrendData[]>([]);
   const [topExpenses, setTopExpenses] = useState<TopItem[]>([]);
@@ -109,7 +112,7 @@ export default function Reports() {
     } else {
       load();
     }
-  }, [tab, from, to]);
+  }, [tab, monthRange]);
 
   const names = useMemo(() => Array.from(new Set(rows.map(r => r.name||'(Sem)'))), [rows]);
   const sum = (name: string, type: 'RECEITA'|'DESPESA') => rows.filter(r => (r.name||'(Sem)')===name && r.type===type).reduce((a,b)=>a+b.total,0);
@@ -117,7 +120,10 @@ export default function Reports() {
 
   return (
     <div className="p-4 text-[color:var(--text)]">
-      <h1 className="heading text-2xl mb-4">Relatórios</h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="heading text-2xl">Relatórios</h1>
+        <MonthSelector />
+      </div>
       <div className="flex flex-wrap gap-2 mb-4 items-center text-sm">
         <button
           onClick={() => setTab('category')}
@@ -149,10 +155,7 @@ export default function Reports() {
         >
           Insights
         </button>
-        <div className="ml-auto flex gap-2">
-        <input type="date" value={from} onChange={(e)=>setFrom(e.target.value)} className="input px-2 py-1 text-sm" />
-        <input type="date" value={to} onChange={(e)=>setTo(e.target.value)} className="input px-2 py-1 text-sm" />
-      </div>
+
       
       {/* Indicadores de carregamento e erro */}
       {loading && (

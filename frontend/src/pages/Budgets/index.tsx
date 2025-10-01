@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
 import { fmtCurrency } from '../../utils/format';
+import { useMonth } from '../../contexts/MonthContext';
+import MonthSelector from '../../components/MonthSelector';
 
 export default function Budgets() {
+  const { formatMonthForInput } = useMonth();
   const [items, setItems] = useState<any[]>([]);
-  const [month, setMonth] = useState(new Date().toISOString().slice(0,7));
+  const month = formatMonthForInput();
   const [cats, setCats] = useState<any[]>([]);
   const [categoryId, setCategoryId] = useState<number | ''>('');
   const [amount, setAmount] = useState('');
@@ -27,7 +30,9 @@ export default function Budgets() {
       }
     })(); 
   }, []);
-  useEffect(() => { load(); }, [month]);
+  useEffect(() => { 
+    load(); 
+  }, [month]);
   const save = async (e: React.FormEvent) => { 
     e.preventDefault(); 
     if(!categoryId) return; 
@@ -76,9 +81,9 @@ export default function Budgets() {
   };
   return (
     <div className="p-4">
-      <h1 className="heading text-2xl mb-4">Orçamentos</h1>
-      <div className="flex items-center gap-2 mb-4">
-        <label>Mês: <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="input px-2 py-1 ml-1" /></label>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="heading text-2xl">Orçamentos</h1>
+        <MonthSelector />
       </div>
       <form onSubmit={save} className="flex gap-2 mb-4 items-center">
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value? Number(e.target.value): '')} className="input px-2 py-1">

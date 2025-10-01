@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import NewTransactionModal from './NewTransactionModal';
-import { setAccessToken } from '../services/api';
+import ThemeSwitcher from './ThemeSwitcher';
+import api, { setAccessToken } from '../services/api';
 
 // Ícones para navegação
 const Icons = {
@@ -49,27 +50,22 @@ const Icons = {
       <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708l3 3z"/>
     </svg>
   ),
-  reconcile: (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-      <path d="M10.97 4.97a.75.75 0 0 1 1.07 1.05l-3.99 4.99a.75.75 0 0 1-1.08.02L4.324 8.384a.75.75 0 1 1 1.06-1.06l2.094 2.093 3.473-4.425a.267.267 0 0 1 .02-.022z"/>
-    </svg>
-  ),
-  recurring: (
-    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-      <path d="M11.534 7h3.932a.25.25 0 0 1 .192.41l-1.966 2.36a.25.25 0 0 1-.384 0l-1.966-2.36a.25.25 0 0 1 .192-.41zm-11 2h3.932a.25.25 0 0 0 .192-.41L2.692 6.23a.25.25 0 0 0-.384 0L.342 8.59A.25.25 0 0 0 .534 9z"/>
-      <path fillRule="evenodd" d="M8 3c-1.552 0-2.94.707-3.857 1.818a.5.5 0 1 1-.771-.636A6.002 6.002 0 0 1 13.917 7H12.9A5.002 5.002 0 0 0 8 3zM3.1 9a5.002 5.002 0 0 0 8.757 2.182.5.5 0 1 1 .771.636A6.002 6.002 0 0 1 2.083 9H3.1z"/>
-    </svg>
-  ),
   profile: (
     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
       <path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/>
       <path fillRule="evenodd" d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm8-7a7 7 0 0 0-5.468 11.37C3.242 11.226 4.805 10 8 10s4.757 1.225 5.468 2.37A7 7 0 0 0 8 1z"/>
     </svg>
   ),
+  fixed: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M8 0a5 5 0 0 0-5 5v1H2a2 2 0 0 0-2 2v5a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a2 2 0 0 0-2-2h-1V5A5 5 0 0 0 8 0zm-3 5a3 3 0 1 1 6 0v1H5V5z"/>
+    </svg>
+  ),
 };
 
 function AppBar({ onLogout }: { onLogout: () => void }) {
   const [currentDate, setCurrentDate] = React.useState<string>('');
+  const [upcomingCount, setUpcomingCount] = React.useState<number>(0);
   
   React.useEffect(() => {
     // Formatar a data atual no formato "Mês Ano"
@@ -77,6 +73,16 @@ function AppBar({ onLogout }: { onLogout: () => void }) {
     const options: Intl.DateTimeFormatOptions = { month: 'long', year: 'numeric' };
     const formattedDate = now.toLocaleDateString('pt-BR', options);
     setCurrentDate(formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1));
+  }, []);
+  React.useEffect(() => {
+    // Fetch upcoming fixed expenses for notifications (optimized)
+    (async () => {
+      try {
+        const r = await api.get('/api/v1/recurring/upcoming', { params: { days: 7 } });
+        const data = r.data?.data || {};
+        setUpcomingCount(Number(data.count || 0));
+      } catch {}
+    })();
   }, []);
   
   return (
@@ -101,6 +107,18 @@ function AppBar({ onLogout }: { onLogout: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-2">
+        <ThemeSwitcher />
+        <Link to="/fixed" className="text-sm rounded-full border border-white/10 px-3 py-1 bg-[color:var(--surf-1)] hover:border-white/20 hover:bg-[color:var(--surf-2)] transition-colors flex items-center gap-1">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+            <path d="M8 0a5 5 0 0 0-5 5v1H2a2 2 0 0 0-2 2v5a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a2 2 0 0 0-2-2h-1V5A5 5 0 0 0 8 0zm-3 5a3 3 0 1 1 6 0v1H5V5z"/>
+          </svg>
+          <span className="relative">
+            Avisos
+            {upcomingCount>0 && (
+              <span className="absolute -top-2 -right-3 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/80 text-black">{upcomingCount}</span>
+            )}
+          </span>
+        </Link>
         <button
           className="btn-primary text-sm flex items-center gap-1 hover:scale-105 transition-transform"
           onClick={() => window.dispatchEvent(new CustomEvent('open-new-transaction'))}
@@ -165,6 +183,20 @@ export default function Layout() {
             <span>Dashboard</span>
           </span>
         </NavLink>
+        <NavLink to="/fixed-dashboard" active={pathname.startsWith('/fixed-dashboard')}>
+          <span className="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+              <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
+            </svg>
+            <span>Dashboard Gastos Fixos</span>
+          </span>
+        </NavLink>
+        <NavLink to="/fixed" active={pathname === '/fixed'}>
+          <span className="flex items-center gap-2">
+            {Icons.fixed}
+            <span>Gastos Fixos</span>
+          </span>
+        </NavLink>
         <NavLink to="/transactions" active={pathname.startsWith('/transactions')}>
           <span className="flex items-center gap-2">
             {Icons.transactions}
@@ -205,18 +237,6 @@ export default function Layout() {
           <span className="flex items-center gap-2">
             {Icons.import}
             <span>Importação</span>
-          </span>
-        </NavLink>
-        <NavLink to="/reconcile" active={pathname.startsWith('/reconcile')}>
-          <span className="flex items-center gap-2">
-            {Icons.reconcile}
-            <span>Conciliação</span>
-          </span>
-        </NavLink>
-        <NavLink to="/recurring" active={pathname.startsWith('/recurring')}>
-          <span className="flex items-center gap-2">
-            {Icons.recurring}
-            <span>Recorrências</span>
           </span>
         </NavLink>
         <NavLink to="/profile" active={pathname.startsWith('/profile')}>
@@ -306,6 +326,14 @@ export default function Layout() {
                   <span>Início</span>
                 </span>
               </SheetLink>
+              <SheetLink to="/fixed-dashboard" active={pathname.startsWith('/fixed-dashboard')} onClick={() => setMobileMenuOpen(false)}>
+                <span className="flex flex-col items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
+                  </svg>
+                  <span>Dashboard</span>
+                </span>
+              </SheetLink>
               <SheetLink to="/transactions" active={pathname.startsWith('/transactions')} onClick={() => setMobileMenuOpen(false)}>
                 <span className="flex flex-col items-center gap-2">
                   {Icons.transactions}
@@ -342,22 +370,16 @@ export default function Layout() {
                   <span>Relatórios</span>
                 </span>
               </SheetLink>
+              <SheetLink to="/fixed" active={pathname === '/fixed'} onClick={() => setMobileMenuOpen(false)}>
+                <span className="flex flex-col items-center gap-2">
+                  {Icons.fixed}
+                  <span>Gastos Fixos</span>
+                </span>
+              </SheetLink>
               <SheetLink to="/import" active={pathname.startsWith('/import')} onClick={() => setMobileMenuOpen(false)}>
                 <span className="flex flex-col items-center gap-2">
                   {Icons.import}
                   <span>Importação</span>
-                </span>
-              </SheetLink>
-              <SheetLink to="/reconcile" active={pathname.startsWith('/reconcile')} onClick={() => setMobileMenuOpen(false)}>
-                <span className="flex flex-col items-center gap-2">
-                  {Icons.reconcile}
-                  <span>Conciliação</span>
-                </span>
-              </SheetLink>
-              <SheetLink to="/recurring" active={pathname.startsWith('/recurring')} onClick={() => setMobileMenuOpen(false)}>
-                <span className="flex flex-col items-center gap-2">
-                  {Icons.recurring}
-                  <span>Recorrências</span>
                 </span>
               </SheetLink>
               <SheetLink to="/profile" active={pathname.startsWith('/profile')} onClick={() => setMobileMenuOpen(false)}>

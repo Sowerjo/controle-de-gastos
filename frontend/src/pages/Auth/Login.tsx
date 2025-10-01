@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api, { resolvedBase, setAccessToken } from '../../services/api';
 import axios from 'axios';
+import bg from '../../../background.jpg';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -54,8 +55,8 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <form className="w-full max-w-sm bg-white dark:bg-gray-800 rounded-lg shadow p-6" onSubmit={submit}>
+    <div className="min-h-screen flex items-center justify-center p-4 bg-cover bg-center" style={{ backgroundImage: `url(${bg})` }}>
+      <form className="w-full max-w-sm rounded-lg shadow-lg p-6 border border-white/20 bg-white/10 dark:bg-gray-900/30 backdrop-blur-md" onSubmit={submit}>
         <h1 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">Entrar</h1>
         <div className="flex items-center justify-between text-xs mb-3">
           <span>API: <b className={apiOk ? 'text-green-600' : 'text-red-600'}>{apiOk === null ? '...' : apiOk ? 'OK' : 'OFF'}</b></span>

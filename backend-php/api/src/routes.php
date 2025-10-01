@@ -196,7 +196,16 @@ $router->add('DELETE', '/api/v1/accounts', function(){ Middleware::requireAuth()
 // Transactions
 $router->add('GET', '/api/v1/transactions', function(){ Middleware::requireAuth();
     $id=$GLOBALS['auth_user_id'];$pdo=DB::conn();
-    $q='SELECT t.id, t.type as tipo, t.amount as valor, t.date as data, t.description as descricao, t.category_id as categoriaId, t.account_id as contaId, t.status as status FROM transactions t WHERE t.user_id=?'; $args=[$id];
+    $q='SELECT t.id, t.type as tipo, t.amount as valor, t.date as data, t.description as descricao, 
+        t.category_id as categoriaId, c.name as categoria_name,
+        t.account_id as contaId, a.name as conta_name,
+        t.payee_id as payeeId, p.name as payee_name,
+        t.status as status 
+        FROM transactions t 
+        LEFT JOIN categories c ON t.category_id = c.id AND c.user_id = t.user_id
+        LEFT JOIN accounts a ON t.account_id = a.id AND a.user_id = t.user_id  
+        LEFT JOIN payees p ON t.payee_id = p.id AND p.user_id = t.user_id
+        WHERE t.user_id=?'; $args=[$id];
     $normalize=function($s){ $t=trim((string)$s); if($t==='') return $t; // yyyy/mm/dd -> yyyy-mm-dd
         if(preg_match('/^(\d{4})[\/](\d{1,2})[\/](\d{1,2})$/',$t,$m)){ return sprintf('%04d-%02d-%02d',(int)$m[1],(int)$m[2],(int)$m[3]); }
         if(preg_match('/^(\d{1,2})[\/](\d{1,2})[\/](\d{2,4})$/',$t,$m)){ $yy=strlen($m[3])===2? (2000+(int)$m[3]):(int)$m[3]; return sprintf('%04d-%02d-%02d',$yy,(int)$m[2],(int)$m[1]); }
@@ -209,7 +218,10 @@ $router->add('GET', '/api/v1/transactions', function(){ Middleware::requireAuth(
     if(isset($_GET['status'])) { $q.=' AND t.status=?'; $args[]=$_GET['status']; }
     if(isset($_GET['payeeId'])) { $q.=' AND t.payee_id=?'; $args[]=(int)$_GET['payeeId']; }
     if(isset($_GET['tagId'])) { $q.=' AND EXISTS (SELECT 1 FROM transaction_tags tt WHERE tt.transaction_id=t.id AND tt.tag_id=?)'; $args[]=(int)$_GET['tagId']; }
-    $q.=' ORDER BY t.date DESC, t.id DESC LIMIT 500';
+    // Add pagination support for better performance
+    $limit = min((int)($_GET['limit'] ?? 30), 100); // Max 100 items per page
+    $offset = max(0, ((int)($_GET['page'] ?? 1) - 1) * $limit);
+    $q.=' ORDER BY t.date DESC, t.id DESC LIMIT '.$limit.' OFFSET '.$offset;
     $st=$pdo->prepare($q);$st->execute($args); json(['data'=>['items'=>$st->fetchAll()]]);
 });
 $router->add('POST', '/api/v1/transactions', function(){ Middleware::requireAuth();
@@ -748,7 +760,60 @@ $router->add('GET', '/api/v1/reports/by-payee', function(){ Middleware::requireA
 $router->add('GET', '/api/v1/reports/by-tag', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $from=$_GET['from']??date('Y-m-01'); $to=$_GET['to']??date('Y-m-t'); $q='SELECT g.name, t.type, SUM(t.amount) total FROM transactions t JOIN transaction_tags tt ON tt.transaction_id=t.id JOIN tags g ON g.id=tt.tag_id WHERE t.user_id=? AND t.date BETWEEN ? AND ? GROUP BY g.name, t.type ORDER BY g.name'; $st=$pdo->prepare($q); $st->execute([$uid,$from,$to]); json(['data'=>$st->fetchAll()]); });
 
 // Recurring run (manual trigger)
-$router->add('POST', '/api/v1/recurring/run', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $today=date('Y-m-d'); $st=$pdo->prepare('SELECT * FROM recurring_rules WHERE user_id=? AND next_run<=? AND (end_date IS NULL OR next_run<=end_date)'); $st->execute([$uid,$today]); $rows=$st->fetchAll(); $created=0; foreach($rows as $r){ $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,payee_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$r['account_id'],$r['type'],$r['amount'],$r['next_run'],$r['description'],$r['category_id'],$r['payee_id'],'PENDING']); $created++; $next=$r['next_run']; if($r['interval_unit']==='day'){ $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' days')); } elseif($r['interval_unit']==='week'){ $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' weeks')); } else { $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' months')); } $pdo->prepare('UPDATE recurring_rules SET next_run=? WHERE id=?')->execute([$next,$r['id']]); } json(['data'=>['created'=>$created]]); });
+$router->add('POST', '/api/v1/recurring/run', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $today=date('Y-m-d');
+    // Ensure last_run column exists (robusto em MySQL)
+    try { $chk=$pdo->prepare("SHOW COLUMNS FROM `recurring_rules` LIKE 'last_run'"); $chk->execute(); if(!$chk->fetch()){ $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN last_run DATE NULL"); } } catch (\Throwable $e) {}
+    $st=$pdo->prepare('SELECT * FROM recurring_rules WHERE user_id=? AND next_run<=? AND (end_date IS NULL OR next_run<=end_date)'); $st->execute([$uid,$today]); $rows=$st->fetchAll(); $created=0; foreach($rows as $r){ $mode = isset($r['mode']) ? strtolower($r['mode']) : 'manual'; if($mode!=='automatic'){ continue; } $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,payee_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$r['account_id'],$r['type'],$r['amount'],$r['next_run'],$r['description'],$r['category_id'],$r['payee_id'],'CLEARED']); $created++; $next=$r['next_run']; if($r['interval_unit']==='day'){ $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' days')); } elseif($r['interval_unit']==='week'){ $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' weeks')); } else { $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' months')); } $pdo->prepare('UPDATE recurring_rules SET last_run=?, next_run=? WHERE id=?')->execute([$today,$next,$r['id']]); } json(['data'=>['created'=>$created]]); });
+
+// Upcoming fixed expenses (optimized), grouped by date (cascata)
+$router->add('GET', '/api/v1/recurring/upcoming', function(){ Middleware::requireAuth();
+    $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn();
+    $days = (int)($_GET['days'] ?? 3);
+    if ($days < 0) $days = 0;
+    // Ensure columns exist (robusto)
+    try { $c=$pdo->prepare("SHOW COLUMNS FROM `recurring_rules` LIKE 'mode'"); $c->execute(); if(!$c->fetch()){ $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN mode ENUM('manual','automatic') NOT NULL DEFAULT 'manual'"); } } catch (\Throwable $e) {}
+    try { $c=$pdo->prepare("SHOW COLUMNS FROM `recurring_rules` LIKE 'notify_days'"); $c->execute(); if(!$c->fetch()){ $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN notify_days INT NOT NULL DEFAULT 3"); } } catch (\Throwable $e) {}
+    try { $c=$pdo->prepare("SHOW COLUMNS FROM `recurring_rules` LIKE 'last_run'"); $c->execute(); if(!$c->fetch()){ $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN last_run DATE NULL"); } } catch (\Throwable $e) {}
+    try { $c=$pdo->prepare("SHOW COLUMNS FROM `recurring_rules` LIKE 'payment_status'"); $c->execute(); if(!$c->fetch()){ $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN payment_status ENUM('pendente','pago','atrasado') NULL DEFAULT NULL"); } } catch (\Throwable $e) {}
+    $st=$pdo->prepare('SELECT * FROM recurring_rules WHERE user_id=?'); $st->execute([$uid]); $rows=$st->fetchAll();
+    $today = strtotime(date('Y-m-d'));
+    $monthStart = strtotime(date('Y-m-01'));
+    $monthEnd = strtotime(date('Y-m-t'));
+    $items = [];
+    foreach ($rows as $r) {
+        // Calculate payment_status
+        $nextRun = strtotime($r['next_run']);
+        $lastRun = $r['last_run'] ? strtotime($r['last_run']) : null;
+        $paidThisMonth = $lastRun && $lastRun >= $monthStart && $lastRun <= $monthEnd;
+        
+        if ($paidThisMonth) {
+            $r['payment_status'] = 'pago';
+        } elseif ($nextRun < $today) {
+            $r['payment_status'] = 'atrasado';
+        } else {
+            $r['payment_status'] = 'pendente';
+        }
+        
+        $notifyDays = isset($r['notify_days']) ? (int)$r['notify_days'] : 3;
+        $limit = max(0, min($notifyDays, $days));
+        $diffDays = (int)ceil(($nextRun - $today) / (60*60*24));
+        $paidThisCycle = (!empty($r['last_run']) && strtotime($r['last_run']) >= $monthStart);
+        if (!$paidThisCycle && $diffDays >= 0 && $diffDays <= $limit) {
+            $items[] = $r;
+        }
+    }
+    // Group by date (cascata)
+    $byDate = [];
+    foreach ($items as $it) {
+        $d = $it['next_run'];
+        if (!isset($byDate[$d])) $byDate[$d] = [];
+        $byDate[$d][] = $it;
+    }
+    ksort($byDate);
+    $grouped = [];
+    foreach ($byDate as $d => $list) { $grouped[] = ['date' => $d, 'items' => $list]; }
+    json(['data' => ['count' => count($items), 'items' => $items, 'by_date' => $grouped]]);
+});
 
 // Budgets CRUD
 $router->add('GET', '/api/v1/budgets', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $month=$_GET['month']??date('Y-m-01'); $q='SELECT b.id,b.category_id,b.month,b.amount,c.name as category FROM budgets b JOIN categories c ON c.id=b.category_id WHERE b.user_id=? AND b.month=? ORDER BY c.name'; $st=$pdo->prepare($q); $st->execute([$uid,$month]); json(['data'=>$st->fetchAll()]); });
@@ -931,9 +996,69 @@ $router->add('DELETE', '/api/v1/goals', function(){ Middleware::requireAuth(); $
 });
 
 // Recurring rules CRUD
-$router->add('GET', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $st=$pdo->prepare('SELECT * FROM recurring_rules WHERE user_id=? ORDER BY next_run'); $st->execute([$uid]); json(['data'=>$st->fetchAll()]); });
-$router->add('POST', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $acc=(int)($in['account_id']??0); $type=strtoupper($in['type']??''); $amount=(float)($in['amount']??0); $desc=$in['description']??null; $cat=$in['category_id']??null; $payee=$in['payee_id']??null; $unit=$in['interval_unit']??'month'; $cnt=(int)($in['interval_count']??1); $next=$in['next_run']??date('Y-m-d'); $end=$in['end_date']??null; if(!$acc||!in_array($type,['RECEITA','DESPESA'])||$amount<=0) json(['error'=>['message'=>'Dados inválidos']],422); $pdo->prepare('INSERT INTO recurring_rules (user_id,account_id,type,amount,description,category_id,payee_id,interval_unit,interval_count,next_run,end_date,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$acc,$type,$amount,$desc,$cat,$payee,$unit,$cnt,$next,$end]); json(['data'=>['ok'=>true]]); });
-$router->add('PUT', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $rid=(int)($in['id']??0); if(!$rid) json(['error'=>['message'=>'ID requerido']],422); $fields=[];$args=[]; foreach(['account_id','type','amount','description','category_id','payee_id','interval_unit','interval_count','next_run','end_date'] as $k){ if(array_key_exists($k,$in)){ $fields[]="$k=?"; $args[]=$in[$k]; } } if(!count($fields)) json(['error'=>['message'=>'Nada a atualizar']],422); $args[]=$rid; $args[]=$uid; $pdo->prepare('UPDATE recurring_rules SET '.implode(',', $fields).' WHERE id=? AND user_id=?')->execute($args); json(['data'=>['ok'=>true]]); });
+$router->add('GET', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn();
+    // Try to ensure extended columns exist
+    try { $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN IF NOT EXISTS mode ENUM('manual','automatic') NOT NULL DEFAULT 'manual'"); } catch (\Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN IF NOT EXISTS notify_days INT NOT NULL DEFAULT 3"); } catch (\Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN IF NOT EXISTS last_run DATE NULL"); } catch (\Throwable $e) {}
+    try { $pdo->exec("ALTER TABLE recurring_rules ADD COLUMN IF NOT EXISTS payment_status ENUM('pendente','pago','atrasado') NULL DEFAULT NULL"); } catch (\Throwable $e) {}
+    
+    $st=$pdo->prepare('SELECT * FROM recurring_rules WHERE user_id=? ORDER BY next_run'); 
+    $st->execute([$uid]); 
+    $rules = $st->fetchAll();
+    
+    // Calculate payment_status for each rule
+    $today = new DateTime();
+    $monthStart = new DateTime($today->format('Y-m-01'));
+    $monthEnd = new DateTime($today->format('Y-m-t'));
+    
+    foreach ($rules as &$rule) {
+        $nextRun = new DateTime($rule['next_run']);
+        $lastRun = $rule['last_run'] ? new DateTime($rule['last_run']) : null;
+        
+        // Check if paid this month
+        $paidThisMonth = $lastRun && $lastRun >= $monthStart && $lastRun <= $monthEnd;
+        
+        if ($paidThisMonth) {
+            $rule['payment_status'] = 'pago';
+        } elseif ($nextRun < $today) {
+            $rule['payment_status'] = 'atrasado';
+        } else {
+            $rule['payment_status'] = 'pendente';
+        }
+    }
+    
+    json(['data'=>$rules]); 
+});
+$router->add('POST', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $acc=(int)($in['account_id']??0); $type=strtoupper($in['type']??''); $amount=(float)($in['amount']??0); $desc=$in['description']??null; $cat=$in['category_id']??null; $payee=$in['payee_id']??null; $unit=$in['interval_unit']??'month'; $cnt=(int)($in['interval_count']??1); $next=$in['next_run']??date('Y-m-d'); $end=$in['end_date']??null; $mode=strtolower($in['mode']??'manual'); $notify=(int)($in['notify_days']??3); if(!$acc||!in_array($type,['RECEITA','DESPESA'])||$amount<=0||!in_array($mode,['manual','automatic'])) json(['error'=>['message'=>'Dados inválidos']],422); $pdo->prepare('INSERT INTO recurring_rules (user_id,account_id,type,amount,description,category_id,payee_id,interval_unit,interval_count,next_run,end_date,mode,notify_days,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,NOW())')->execute([$uid,$acc,$type,$amount,$desc,$cat,$payee,$unit,$cnt,$next,$end,$mode,$notify]); json(['data'=>['ok'=>true]]); });
+$router->add('PUT', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $in=json_decode(file_get_contents('php://input'),true)?:[]; $rid=(int)($in['id']??0); if(!$rid) json(['error'=>['message'=>'ID requerido']],422); $fields=[];$args=[]; foreach(['account_id','type','amount','description','category_id','payee_id','interval_unit','interval_count','next_run','end_date','mode','notify_days'] as $k){ if(array_key_exists($k,$in)){ $fields[]="$k=?"; $args[]=$in[$k]; } } if(!count($fields)) json(['error'=>['message'=>'Nada a atualizar']],422); $args[]=$rid; $args[]=$uid; $pdo->prepare('UPDATE recurring_rules SET '.implode(',', $fields).' WHERE id=? AND user_id=?')->execute($args); json(['data'=>['ok'=>true]]); });
+
+// Confirm manual payment for a fixed expense
+$router->add('POST', '/api/v1/fixed-expenses/confirm', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn();
+    $in=json_decode(file_get_contents('php://input'),true)?:[]; $rid=(int)($in['id']??0); if(!$rid) json(['error'=>['message'=>'ID requerido']],422);
+    $st=$pdo->prepare('SELECT * FROM recurring_rules WHERE id=? AND user_id=?'); $st->execute([$rid,$uid]); $r=$st->fetch(); if(!$r) json(['error'=>['message'=>'Regra não encontrada']],404);
+    // Impedir confirmação duplicada no mesmo ciclo
+    $cycleStart = date('Y-m-01', strtotime($r['next_run']));
+    if (!empty($r['last_run'])) {
+        $lr = strtotime($r['last_run']); $cs = strtotime($cycleStart);
+        if ($lr >= $cs) json(['error'=>['message'=>'Pagamento já confirmado para este ciclo']],409);
+    }
+    $txDate = date('Y-m-d');
+    // Idempotência por data/valor/conta/tipo
+    $dup=$pdo->prepare('SELECT COUNT(*) FROM transactions WHERE user_id=? AND account_id=? AND type=? AND amount=? AND date=?');
+    $dup->execute([$uid,$r['account_id'],$r['type'],$r['amount'],$txDate]);
+    if ((int)$dup->fetchColumn() > 0) json(['error'=>['message'=>'Pagamento já registrado hoje']],409);
+    // Criar transação com data de hoje (pago agora)
+    $pdo->prepare('INSERT INTO transactions (user_id,account_id,type,amount,date,description,category_id,payee_id,status,created_at) VALUES (?,?,?,?,?,?,?,?,?,NOW())')
+        ->execute([$uid,$r['account_id'],$r['type'],$r['amount'],$txDate,$r['description'],$r['category_id'],$r['payee_id'],'CLEARED']);
+    // Avançar próximo vencimento a partir do next_run atual
+    $next=$r['next_run'];
+    if($r['interval_unit']==='day'){ $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' days')); }
+    elseif($r['interval_unit']==='week'){ $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' weeks')); }
+    else { $next=date('Y-m-d', strtotime($next.' +'.$r['interval_count'].' months')); }
+    $pdo->prepare('UPDATE recurring_rules SET last_run=?, next_run=? WHERE id=? AND user_id=?')->execute([$txDate,$next,$rid,$uid]);
+    json(['data'=>['ok'=>true]]);
+});
 $router->add('DELETE', '/api/v1/recurring', function(){ Middleware::requireAuth(); $uid=$GLOBALS['auth_user_id']; $pdo=DB::conn(); $rid=(int)($_GET['id']??0); $pdo->prepare('DELETE FROM recurring_rules WHERE id=? AND user_id=?')->execute([$rid,$uid]); json(['data'=>['ok'=>true]]); });
 
 // Debug endpoint to check and fix database schema

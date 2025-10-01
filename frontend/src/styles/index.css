@@ -4,6 +4,7 @@
 
 /* Design Tokens */
 :root {
+  /* Tema Escuro (padrão) */
   --bg: #0B0F1A;
   --surf-1: #0F172A;
   --surf-2: #131C2F;
@@ -26,6 +27,32 @@
 
   --blur: 12px;
   --elev: 1;
+}
+
+/* Tema Claro */
+[data-theme="light"] {
+  --bg: #FFFFFF;
+  --surf-1: #F8FAFC;
+  --surf-2: #F1F5F9;
+  --text: #1E293B;
+  --text-dim: #64748B;
+  --accent: #0EA5E9;
+  --accent-2: #D946EF;
+  --pos: #16A34A;
+  --neg: #DC2626;
+  --warn: #EA580C;
+  --brd: rgba(0,0,0,.08);
+
+  --shadow-1: 0 4px 16px rgba(0, 0, 0, .08);
+  --shadow-glow: 0 0 24px rgba(14, 165, 233, .15);
+}
+
+/* Transições suaves entre temas */
+.theme-transition,
+.theme-transition *,
+.theme-transition *:before,
+.theme-transition *:after {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease !important;
 }
 
 html {

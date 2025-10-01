@@ -30,21 +30,21 @@ function copyDir(src, dest) {
 rimraf(out);
 mkdirp(out);
 
-// Package 1: frontend-only (static hosting)
-const feOut = path.join(out, 'frontend');
-copyDir(feDist, feOut);
-// Ensure Apache SPA rewrite is present in the packaged frontend
+// Package 1: frontend-only (static hosting) at dist root
+copyDir(feDist, out);
+// Ensure Apache SPA rewrite is present in the packaged frontend (root)
 const spaHtaccess = path.join(root, 'frontend', 'public', '.htaccess');
 if (fs.existsSync(spaHtaccess)) {
-  fs.copyFileSync(spaHtaccess, path.join(feOut, '.htaccess'));
+  fs.copyFileSync(spaHtaccess, path.join(out, '.htaccess'));
 }
 
 // Package 2: PHP API for shared hosting
 const apiOut = path.join(out, 'api');
 copyDir(phpApi, apiOut);
-if (fs.existsSync(phpEnv)) fs.copyFileSync(phpEnv, path.join(out, '.env.example'));
+if (fs.existsSync(phpEnv)) fs.copyFileSync(phpEnv, path.join(apiOut, '.env.example'));
 if (fs.existsSync(phpSchema)) fs.copyFileSync(phpSchema, path.join(out, 'schema.sql'));
 
+
 console.log('Packaged into:', out);
-console.log('- frontend/: arquivos estáticos (public_html/htdocs)');
+console.log('- (root)/: arquivos estáticos do frontend (public_html/htdocs)');
 console.log('- api/: backend PHP (coloque em /api do seu hosting)');

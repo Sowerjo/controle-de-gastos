@@ -65,6 +65,8 @@ model Transaction {
   userId      Int      @map("user_id")
   accountId   Int      @map("account_id")
   categoryId  Int?     @map("category_id")
+  paymentStatus String? @map("payment_status") // 'pendente', 'pago', 'atrasado'
+  recurringRuleId Int? @map("recurring_rule_id")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
