@@ -3,6 +3,15 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
 import { fmtCurrency } from '../../utils/format';
 import { useGoals, notifyGoalsUpdate } from '../../hooks/useGoals';
+import ModernLayout, { ModernCard, ModernButton } from '../../components/Layout/ModernLayout';
+import { 
+  TargetIcon,
+  PlusIcon,
+  EditIcon,
+  TrashIcon,
+  ArchiveIcon,
+  LoadingIcon
+} from '../../components/Icons';
 
 type Goal = {
   id: number;
@@ -75,97 +84,143 @@ export default function Goals() {
     });
   }, [items]);
 
+  const activeGoals = sorted.filter(g => !g.archived_at);
+  const completedGoals = sorted.filter(g => (g.current_amount || g.accumulated || 0) >= (g.target_amount || 0));
+
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="heading text-2xl">Metas</h1>
-        <button className="btn-primary" onClick={openCreate}>+ Nova Meta</button>
-      </div>
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-2">
+    <ModernLayout 
+      title="Metas" 
+      subtitle={`${activeGoals.length} metas ativas • ${completedGoals.length} concluídas`}
+      headerActions={
+        <ModernButton onClick={openCreate} className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700">
+          <PlusIcon size={18} />
+          Nova Meta
+        </ModernButton>
+      }
+    >
+      {/* Cards para mobile e desktop */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {sorted.map((g) => {
           const pct = Math.min(100, Math.max(0, Math.round(g.percent || 0)));
           const done = (g.current_amount || g.accumulated || 0) >= (g.target_amount || 0);
+          const isDebt = g.type === 'quitar_divida';
+          
           return (
-            <div key={g.id} className="surface-2 rounded-lg p-3 border border-white/5">
-              <div className="flex items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="font-medium truncate flex items-center gap-2"><span className={`inline-block w-2 h-2 rounded-full ${g.type==='quitar_divida' ? 'bg-pink-400' : 'bg-cyan-400'}`} />{g.name}</div>
-                  <div className="text-xs text-[color:var(--text-dim)]">Prazo: {g.target_date || '-'} • {pct}%</div>
+            <ModernCard key={g.id} className={`${done ? 'border-green-500/30 bg-green-500/5' : ''}`}>
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    isDebt 
+                      ? 'bg-gradient-to-r from-pink-500 to-rose-500' 
+                      : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                  }`}>
+                    <TargetIcon className="text-white" size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-white truncate">{g.name}</h3>
+                    <p className="text-xs text-white/60">
+                      {isDebt ? 'Quitar Dívida' : 'Poupança'} • {g.target_date || 'Sem prazo'}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-sm tnum">{fmtCurrency(g.current_amount || g.accumulated || 0)} / {fmtCurrency(g.target_amount || 0)}</div>
-                  <div className="text-[11px] text-[color:var(--text-dim)]">Faltam {fmtCurrency(g.remaining || 0)}</div>
-                </div>
-              </div>
-              <div className="h-2 rounded mt-2 bg-white/5">
-                <div className={`h-2 rounded ${g.type==='quitar_divida' ? 'bg-gradient-to-r from-pink-400 to-rose-400' : 'bg-gradient-to-r from-cyan-400 to-fuchsia-400'}`} style={{ width: `${pct}%` }} />
-              </div>
-              <div className="flex justify-end gap-4 mt-2 text-sm">
-                {!done && (
-                  <button className="text-cyan-300 hover:text-cyan-200" onClick={() => setShowContrib(g)}>Aportar</button>
+                
+                {done && (
+                  <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
                 )}
-                <button className="text-[color:var(--text-dim)] hover:text-[color:var(--text)]" onClick={() => openEdit(g)}>Editar</button>
-                <button className="text-rose-300 hover:text-rose-200" onClick={() => remove(g)}>Excluir</button>
               </div>
-            </div>
+
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-white/70">Progresso</span>
+                    <span className="text-white font-medium">{pct}%</span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        done 
+                          ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                          : isDebt 
+                            ? 'bg-gradient-to-r from-pink-500 to-rose-500'
+                            : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                      }`}
+                      style={{width: `${pct}%`}}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center">
+                  <div>
+                    <p className="text-xs text-white/60">Atual</p>
+                    <p className="text-sm font-semibold text-white">
+                      {fmtCurrency(g.current_amount || g.accumulated || 0)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-white/60">Meta</p>
+                    <p className="text-sm font-semibold text-white">
+                      {fmtCurrency(g.target_amount || 0)}
+                    </p>
+                  </div>
+                </div>
+
+                {!done && (g.remaining || 0) > 0 && (
+                  <div className="text-center p-2 bg-white/5 rounded-lg">
+                    <p className="text-xs text-white/60">Faltam</p>
+                    <p className="text-sm font-semibold text-white">
+                      {fmtCurrency(g.remaining || 0)}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
+                <ModernButton
+                  onClick={() => openEdit(g)}
+                  size="sm"
+                  className="flex-1 bg-white/10 hover:bg-white/20"
+                >
+                  <EditIcon size={14} />
+                  Editar
+                </ModernButton>
+                <ModernButton
+                  onClick={() => remove(g)}
+                  size="sm"
+                  variant="danger"
+                  className="opacity-70 hover:opacity-100"
+                >
+                  <TrashIcon size={14} />
+                </ModernButton>
+              </div>
+            </ModernCard>
           );
         })}
       </div>
 
-      {/* Desktop table */}
-      <div className="hidden md:block overflow-auto card">
-        <table className="min-w-[900px] w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              <th className="p-2">Meta</th>
-              <th className="p-2 tnum">Alvo</th>
-              <th className="p-2 tnum">Acumulado</th>
-              <th className="p-2 tnum">Faltam</th>
-              <th className="p-2 tnum">%</th>
-              <th className="p-2">Prazo</th>
-              <th className="p-2 tnum">Aporte sugerido/mês</th>
-              <th className="p-2">Status</th>
-              <th className="p-2 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((g) => {
-              const pct = Math.min(100, Math.max(0, Math.round(g.percent || 0)));
-              const done = (g.current_amount || g.accumulated || 0) >= (g.target_amount || 0);
-              return (
-                <tr key={g.id} className="border-t border-white/5 align-top">
-                  <td className="p-2">
-                    <div className="font-medium flex items-center gap-2">
-                      <span className={`inline-block w-2 h-2 rounded-full ${g.type==='quitar_divida' ? 'bg-pink-400' : 'bg-cyan-400'}`} />
-                      {g.name}
-                    </div>
-                    <div className="h-2 rounded mt-2 bg-white/5">
-                      <div className={`h-2 rounded ${g.type==='quitar_divida' ? 'bg-gradient-to-r from-pink-400 to-rose-400' : 'bg-gradient-to-r from-cyan-400 to-fuchsia-400'}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </td>
-                  <td className="p-2 tnum">{fmtCurrency(g.target_amount || 0)}</td>
-                  <td className="p-2 tnum">{fmtCurrency(g.current_amount || g.accumulated || 0)}</td>
-                  <td className="p-2 tnum">{fmtCurrency(g.remaining || 0)}</td>
-                  <td className="p-2 tnum">{pct}%</td>
-                  <td className="p-2">{g.target_date || '-'}</td>
-                  <td className="p-2 tnum">{g.suggested_monthly ? fmtCurrency(Number(g.suggested_monthly||0)) : '-'}</td>
-                  <td className="p-2">{done ? 'Concluída' : 'Ativa'}</td>
-                  <td className="p-2 text-right">
-                    <div className="flex gap-2 justify-end">
-                      {!done && (
-                        <button className="text-cyan-300 hover:text-cyan-200" onClick={() => setShowContrib(g)}>Aportar</button>
-                      )}
-                      <button className="text-[color:var(--text-dim)] hover:text-[color:var(--text)]" onClick={() => openEdit(g)}>Editar</button>
-                      <button className="text-rose-300 hover:text-rose-200" onClick={() => remove(g)}>Excluir</button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {sorted.length === 0 && (
+        <ModernCard>
+          <div className="text-center py-12">
+            <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <TargetIcon className="text-white/50" size={24} />
+            </div>
+            <p className="text-white/70 text-lg mb-2">Nenhuma meta cadastrada</p>
+            <p className="text-white/50 text-sm mb-6">Crie suas primeiras metas financeiras para começar a poupar</p>
+            <ModernButton 
+              onClick={openCreate}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
+            >
+              <PlusIcon size={18} />
+              Criar Primeira Meta
+            </ModernButton>
+          </div>
+        </ModernCard>
+      )}
+
+
 
       {showNew && (
         <GoalModal
@@ -177,7 +232,7 @@ export default function Goals() {
       {showContrib && (
         <ContributeModal goal={showContrib} onClose={() => setShowContrib(null)} onSaved={refreshGoals} />
       )}
-    </div>
+    </ModernLayout>
   );
 }
 

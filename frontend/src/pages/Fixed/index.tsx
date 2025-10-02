@@ -1,6 +1,9 @@
 import React from 'react';
 import api from '../../services/api';
 import { notifyAccountsUpdate } from '../../hooks/useAccounts';
+import ModernLayout, { ModernCard, ModernButton, ModernInput } from '../../components/Layout/ModernLayout';
+import { ChartBarIcon, CalendarIcon, PlusIcon } from '../../components/Icons';
+import { fmtCurrency } from '../../utils/format';
 
 type Rule = {
   id: number;
@@ -122,190 +125,492 @@ export default function FixedExpenses() {
   });
 
   return (
-    <div className="p-4">
+    <ModernLayout title="Gastos Fixos" subtitle="Gerencie seus gastos recorrentes mensais">
+
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 px-3 py-2 rounded shadow-lg border ${toast.type==='success'?'bg-green-500/20 border-green-500/40 text-green-200': toast.type==='info'?'bg-amber-500/20 border-amber-500/40 text-amber-200':'bg-rose-500/20 border-rose-500/40 text-rose-200'}`}>{toast.message}</div>
+        <div className={`fixed top-4 right-4 z-50 px-4 py-3 rounded-xl shadow-lg border backdrop-blur-sm ${
+          toast.type === 'success' 
+            ? 'bg-green-500/20 border-green-500/40 text-green-200' 
+            : toast.type === 'info'
+            ? 'bg-amber-500/20 border-amber-500/40 text-amber-200'
+            : 'bg-rose-500/20 border-rose-500/40 text-rose-200'
+        }`}>
+          {toast.message}
+        </div>
       )}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="heading text-2xl">Gastos Fixos</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={runAuto} type="button" className="btn-primary text-sm">Processar automáticos</button>
+
+      {error && (
+        <div className="card mb-6 p-4 bg-red-50 border-red-200">
+          <div className="flex items-center gap-3">
+            <span className="text-red-600">⚠️</span>
+            <span className="text-red-800">{error}</span>
+          </div>
         </div>
+      )}
+
+      {/* Cards de Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-purple-500/20 border border-purple-500/30">
+              <span className="text-purple-300">💰</span>
+            </div>
+            <div>
+              <p className="text-white/80 text-sm">Previsto (mês)</p>
+              <p className="text-2xl font-bold text-purple-300">{fmtCurrency(monthForecast)}</p>
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-yellow-500/20 border border-yellow-500/30">
+              <span className="text-yellow-300">📅</span>
+            </div>
+            <div>
+              <p className="text-white/80 text-sm">Pendentes</p>
+              <p className="text-2xl font-bold text-yellow-300">{items.filter(r=>statusOf(r)==='pendente').length}</p>
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30">
+              <span className="text-red-300">⚠️</span>
+            </div>
+            <div>
+              <p className="text-white/80 text-sm">Atrasados</p>
+              <p className="text-2xl font-bold text-red-300">{items.filter(r=>statusOf(r)==='atrasado').length}</p>
+            </div>
+          </div>
+        </ModernCard>
       </div>
 
-      {error && (<div className="bg-rose-500/20 border border-rose-500/50 text-rose-200 p-3 rounded mb-4">{error}</div>)}
+      {/* Grid: Gastos por Categoria & Próximos Vencimentos */}
+      {(() => {
+        // Resumo por categoria (top 5)
+        const byCat: Record<string, { name: string; total: number; count: number }> = {};
+        items.filter(r => r.type === 'DESPESA').forEach(r => {
+          const key = String(r.category_id || 'none');
+          const name = r.category_id ? (categories.find((c:any)=>c.id===r.category_id)?.name || 'Sem categoria') : 'Sem categoria';
+          byCat[key] = byCat[key] || { name, total: 0, count: 0 };
+          byCat[key].total += Number(r.amount||0);
+          byCat[key].count += 1;
+        });
+        const categorySummary = Object.values(byCat).sort((a,b)=>b.total-a.total).slice(0,5);
+        const maxTotal = Math.max(1, ...categorySummary.map(c=>c.total));
 
-      <div className="card p-4 mb-6">
-        <div className="text-sm text-[color:var(--text-dim)] mb-2">Resumo mensal</div>
-        <div className="grid sm:grid-cols-3 gap-3">
-          <div className="surface-2 p-3 rounded border border-white/5">
-            <div className="text-xs text-[color:var(--text-dim)]">Previsto (mês)</div>
-            <div className="text-lg font-semibold">{fmtCurrency(monthForecast)}</div>
-          </div>
-          <div className="surface-2 p-3 rounded border border-white/5">
-            <div className="text-xs text-[color:var(--text-dim)]">Pendentes</div>
-            <div className="text-lg font-semibold">{items.filter(r=>statusOf(r)==='pendente').length}</div>
-          </div>
-          <div className="surface-2 p-3 rounded border border-white/5">
-            <div className="text-xs text-[color:var(--text-dim)]">Atrasados</div>
-            <div className="text-lg font-semibold">{items.filter(r=>statusOf(r)==='atrasado').length}</div>
-          </div>
-        </div>
-      </div>
+        // Próximos vencimentos (top 3)
+        const upcomingExpenses = items
+          .filter(r => statusOf(r) !== 'pago')
+          .sort((a,b)=> new Date(a.next_run).getTime() - new Date(b.next_run).getTime())
+          .slice(0,3);
 
-      <form onSubmit={save} className="grid md:grid-cols-2 gap-3 mb-4">
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Conta vinculada</label>
-          <select aria-label="Conta vinculada" value={form.account_id} onChange={(e)=>setForm({...form, account_id: Number(e.target.value)})} className="input px-2 py-2 text-sm w-full" required>
-            <option value="">Selecione uma conta…</option>{accounts.map((a:any)=>(<option key={a.id} value={a.id}>{a.name}</option>))}
-          </select>
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Conta onde o pagamento será registrado.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Valor do gasto fixo</label>
-          <input aria-label="Valor do gasto fixo" inputMode="decimal" value={form.amount} onChange={(e)=>setForm({...form, amount: e.target.value})} placeholder="Ex.: 1.200,00" className="input px-2 py-2 text-sm w-full" />
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Informe o valor mensal em BRL.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Nome do gasto</label>
-          <input aria-label="Nome do gasto" value={form.description} onChange={(e)=>setForm({...form, description: e.target.value})} placeholder="Ex.: Aluguel" className="input px-2 py-2 text-sm w-full" />
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Como o gasto será identificado em relatórios.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Categoria da despesa</label>
-          <select aria-label="Categoria da despesa" value={form.category_id} onChange={(e)=>setForm({...form, category_id: e.target.value})} className="input px-2 py-2 text-sm w-full">
-            <option value="">Selecione uma categoria…</option>{categories.filter((c:any)=>c.type==='DESPESA').map((c:any)=>(<option key={c.id} value={c.id}>{c.name}</option>))}
-          </select>
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Usado para agrupar e analisar gastos nos relatórios.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Favorecido (quem recebe)</label>
-          <select aria-label="Favorecido" value={form.payee_id} onChange={(e)=>setForm({...form, payee_id: e.target.value})} className="input px-2 py-2 text-sm w-full">
-            <option value="">Selecione um favorecido…</option>{payees.map((p:any)=>(<option key={p.id} value={p.id}>{p.name}</option>))}
-          </select>
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Pessoa ou empresa que recebe o pagamento.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Dia do vencimento</label>
-          <input aria-label="Dia do vencimento" type="number" min={1} max={31} value={form.due_day} onChange={(e)=>setForm({...form, due_day: Number(e.target.value)})} className="input px-2 py-2 text-sm w-full" placeholder="Ex.: 5" />
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Dia do mês (1–31) em que o gasto vence.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Forma de pagamento</label>
-          <select aria-label="Forma de pagamento" value={form.mode} onChange={(e)=>setForm({...form, mode: e.target.value})} className="input px-2 py-2 text-sm w-full">
-            <option value="manual">Manual (você confirma o pagamento)</option>
-            <option value="automatic">Automático (gera na data de vencimento)</option>
-          </select>
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Escolha se o pagamento será confirmado manualmente ou gerado automaticamente.</div>
-        </div>
-        <div>
-          <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Aviso de vencimento (dias antes)</label>
-          <input aria-label="Aviso de vencimento" type="number" min={0} value={form.notify_days} onChange={(e)=>setForm({...form, notify_days: Number(e.target.value)})} className="input px-2 py-2 text-sm w-full" placeholder="Ex.: 3" />
-          <div className="text-[12px] text-[color:var(--text-dim)] mt-1">Quantos dias antes do vencimento exibir o alerta.</div>
-        </div>
-        <div className="md:col-span-2">
-          <button className="btn-primary text-sm">Salvar gasto fixo</button>
-        </div>
-      </form>
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            {/* Resumo por Categoria */}
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30">
+                  <ChartBarIcon className="w-5 h-5 text-cyan-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Gastos por Categoria</h3>
+                  <p className="text-white/70 text-sm">Distribuição dos gastos fixos</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                {categorySummary.map((c, index) => (
+                  <div key={index} className="p-3 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-white font-medium">{c.name}</div>
+                      <div className="text-white/80 font-semibold">{fmtCurrency(c.total)}</div>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-cyan-500 to-purple-500" style={{ width: `${Math.round((c.total/maxTotal)*100)}%` }}></div>
+                    </div>
+                    <div className="text-xs text-white/50 mt-1">{c.count} item{c.count>1?'s':''}</div>
+                  </div>
+                ))}
+                {categorySummary.length === 0 && (
+                  <div className="text-white/70 text-sm">Sem dados de categorias</div>
+                )}
+              </div>
+            </ModernCard>
 
-      <div className="card p-3 mb-3">
-        <div className="grid md:grid-cols-3 gap-2">
+            {/* Próximos Vencimentos */}
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+                  <CalendarIcon className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Próximos Vencimentos</h3>
+                  <p className="text-white/70 text-sm">Gastos que vencem em breve</p>
+                </div>
+              </div>
+              <div className="space-y-3">
+                {upcomingExpenses.length > 0 ? (
+                  upcomingExpenses.map((r, i) => (
+                    <div key={i} className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-center justify-between">
+                      <div>
+                        <div className="text-white font-medium">{r.description || 'Gasto Fixo'}</div>
+                        <div className="text-white/60 text-xs">{new Date(r.next_run).toLocaleDateString('pt-BR')}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-white/80 font-semibold">{fmtCurrency(Number(r.amount||0))}</span>
+                        <span className="px-2 py-1 text-xs rounded-full bg-yellow-500/20 border border-yellow-500/30 text-yellow-300">pendente</span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-white/70 text-sm">Sem vencimentos próximos</div>
+                )}
+              </div>
+            </ModernCard>
+          </div>
+        );
+      })()}
+
+      {/* Formulário de Cadastro */}
+      <ModernCard className="p-6 mb-8">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+            <PlusIcon className="w-5 h-5 text-blue-400" />
+          </div>
           <div>
-            <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Filtrar por status</label>
-            <select className="input px-2 py-2 text-sm w-full" value={statusFilter} onChange={(e)=>setStatusFilter(e.target.value as any)}>
+            <h3 className="text-lg font-semibold text-white">Novo Gasto Fixo</h3>
+            <p className="text-white/80 text-sm">Cadastre um novo gasto recorrente</p>
+          </div>
+        </div>
+
+        <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Conta vinculada</label>
+            <select 
+              value={form.account_id} 
+              onChange={(e)=>setForm({...form, account_id: Number(e.target.value)})} 
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+              required
+            >
+              <option value="">Selecione uma conta…</option>
+              {accounts.map((a:any)=>(<option key={a.id} value={a.id}>{a.name}</option>))}
+            </select>
+          </div>
+
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Valor do gasto fixo</label>
+            <input
+              type="text"
+              value={form.amount}
+              onChange={(e)=>setForm({...form, amount: e.target.value})}
+              placeholder="Ex.: 1.200,00"
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            />
+          </div>
+
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Nome do gasto</label>
+            <input
+              type="text"
+              value={form.description}
+              onChange={(e)=>setForm({...form, description: e.target.value})}
+              placeholder="Ex.: Aluguel"
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            />
+          </div>
+
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Categoria da despesa</label>
+            <select 
+              value={form.category_id} 
+              onChange={(e)=>setForm({...form, category_id: e.target.value})} 
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            >
+              <option value="">Selecione uma categoria…</option>
+              {categories.filter((c:any)=>c.type==='DESPESA').map((c:any)=>(<option key={c.id} value={c.id}>{c.name}</option>))}
+            </select>
+          </div>
+
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Favorecido (quem recebe)</label>
+            <select 
+              value={form.payee_id} 
+              onChange={(e)=>setForm({...form, payee_id: e.target.value})} 
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            >
+              <option value="">Selecione um favorecido…</option>
+              {payees.map((p:any)=>(<option key={p.id} value={p.id}>{p.name}</option>))}
+            </select>
+          </div>
+
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Dia do vencimento</label>
+            <input
+              type="number"
+              min={1}
+              max={31}
+              value={form.due_day}
+              onChange={(e)=>setForm({...form, due_day: Number(e.target.value)})}
+              placeholder="Ex.: 5"
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            />
+          </div>
+
+          <div className="md:col-span-1">
+            <label className="block text-sm font-medium mb-1">Forma de pagamento</label>
+            <select 
+              value={form.mode} 
+              onChange={(e)=>setForm({...form, mode: e.target.value})} 
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            >
+              <option value="manual">Manual (você confirma o pagamento)</option>
+              <option value="automatic">Automático (gera na data de vencimento)</option>
+            </select>
+          </div>
+
+          <div className="md:col-span-2">
+            <label className="block text-sm font-medium mb-1">Aviso de vencimento (dias antes)</label>
+            <input
+              type="number"
+              min={0}
+              value={form.notify_days}
+              onChange={(e)=>setForm({...form, notify_days: Number(e.target.value)})}
+              placeholder="Ex.: 3"
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+            />
+          </div>
+
+          <div className="md:col-span-2">
+            <ModernButton type="submit" variant="primary" className="w-full md:w-auto">
+              <PlusIcon className="w-4 h-4" />
+              Salvar gasto fixo
+            </ModernButton>
+          </div>
+        </form>
+      </ModernCard>
+
+      {/* Filtros / Lista header */}
+      <ModernCard className="p-6 mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
+              <ChartBarIcon className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Todos os Gastos Fixos</h3>
+              <p className="text-white/70 text-sm">Lista completa com filtros</p>
+            </div>
+          </div>
+          <div className="hidden md:block w-64">
+            <ModernInput placeholder="Buscar por descrição..." />
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">Filtrar por status</label>
+            <select 
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm" 
+              value={statusFilter} 
+              onChange={(e)=>setStatusFilter(e.target.value as any)}
+            >
               <option value="all">Todos</option>
               <option value="pendente">Pendentes</option>
               <option value="atrasado">Atrasados</option>
               <option value="pago">Pagos</option>
             </select>
           </div>
-          <div>
-            <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Filtrar por conta</label>
-            <select className="input px-2 py-2 text-sm w-full" value={accountFilter} onChange={(e)=>setAccountFilter(e.target.value ? Number(e.target.value) : '')}>
+          
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">Filtrar por conta</label>
+            <select 
+              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm" 
+              value={accountFilter} 
+              onChange={(e)=>setAccountFilter(e.target.value ? Number(e.target.value) : '')}
+            >
               <option value="">Todas</option>
               {accounts.map((a:any)=>(<option key={a.id} value={a.id}>{a.name}</option>))}
             </select>
           </div>
+          <div className="md:hidden">
+            <ModernInput placeholder="Buscar por descrição..." />
+          </div>
         </div>
-      </div>
-      <div className="overflow-auto">
-        <table className="min-w-[900px] w-full text-sm">
-          <thead>
-            <tr className="text-left">
-              <th className="p-2">Descrição</th>
-              <th className="p-2">Conta</th>
-              <th className="p-2 tnum">Valor</th>
-              <th className="p-2">Modo</th>
-              <th className="p-2">Aviso (dias)</th>
-              <th className="p-2">Vencimento</th>
-              <th className="p-2 text-right">Ações</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.map((r) => {
-              const accName = accounts.find((a:any)=>a.id===r.account_id)?.name || r.account_id;
-              const st = statusOf(r);
-              return (
-                <tr key={r.id} className="border-t">
-                  <td className="p-2">{r.description||'Gasto Fixo'}</td>
-                  <td className="p-2">{accName}</td>
-                  <td className="p-2 tnum">{fmtCurrency(Number(r.amount||0))}</td>
-                  <td className="p-2">
-                    {editId===r.id ? (
-                      <select className="input px-2 py-1 text-sm" value={editDraft.mode} onChange={(e)=>setEditDraft({...editDraft, mode: e.target.value})}>
-                        <option value="manual">Manual</option>
-                        <option value="automatic">Automático</option>
-                      </select>
-                    ) : (
-                      (r.mode||'manual')==='automatic'?'Automático':'Manual'
-                    )}
-                  </td>
-                  <td className="p-2">
-                    {editId===r.id ? (
-                      <input type="number" min={0} className="input px-2 py-1 text-sm w-24" value={editDraft.notify_days} onChange={(e)=>setEditDraft({...editDraft, notify_days: Number(e.target.value)})} />
-                    ) : (
-                      Number(r.notify_days ?? 3)
-                    )}
-                  </td>
-                  <td className="p-2">
-                    {editId===r.id ? (
-                      <input type="date" className="input px-2 py-1 text-sm" value={editDraft.next_run} onChange={(e)=>setEditDraft({...editDraft, next_run: e.target.value})} />
-                    ) : r.next_run}
-                  </td>
-                  <td className="p-2 text-right">
-                    {(r.mode||'manual')==='manual' && st!=='pago' && (
-                      <button disabled={confirmingId===r.id} onClick={()=>confirmPay(r.id)} className="px-3 py-1 rounded border border-white/10 hover:border-white/20 disabled:opacity-50" title={st==='atrasado'?'Vencido: confirmar cria a transação hoje':''}>{confirmingId===r.id?'Confirmando…':'Confirmar pagamento'}</button>
-                    )}
-                    {editId===r.id ? (
-                      <>
-                        <button
-                          className="ml-2 px-3 py-1 rounded border border-white/10 hover:border-white/20"
-                          onClick={async()=>{
-                            try {
-                              await api.put('/api/v1/recurring', { id: r.id, mode: editDraft.mode, next_run: editDraft.next_run, notify_days: editDraft.notify_days });
-                              setEditId(null);
-                              await load();
-                              showToast('success', 'Gasto fixo atualizado');
-                            } catch (e:any) {
-                              const msg = e?.response?.data?.error?.message || e?.message || 'Falha ao salvar';
-                              setError(msg);
-                              showToast('error', msg);
-                            }
-                          }}
-                        >Salvar</button>
-                        <button className="ml-2 text-[color:var(--text-dim)] hover:underline" onClick={()=>setEditId(null)}>Cancelar</button>
-                      </>
-                    ) : (
-                      <button className="ml-2 text-[color:var(--text-dim)] hover:underline" onClick={()=>{ setEditId(r.id); setEditDraft({ mode: (r.mode||'manual'), next_run: r.next_run, notify_days: Number(r.notify_days ?? 3) }); }}>Editar</button>
-                    )}
-                    <button onClick={()=>del(r.id)} className="ml-2 text-red-500 hover:underline">Excluir</button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      </ModernCard>
+
+      {/* Tabela de Gastos */}
+      <ModernCard className="p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 rounded-lg bg-green-500/20 border border-green-500/30">
+            <span className="text-green-300">💳</span>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Lista de Gastos Fixos</h3>
+            <p className="text-white/80 text-sm">{filteredItems.length} gastos encontrados</p>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-white/10">
+                <th className="p-3 text-white/70 font-medium">Descrição</th>
+                <th className="p-3 text-white/70 font-medium">Conta</th>
+                <th className="p-3 text-white/70 font-medium">Valor</th>
+                <th className="p-3 text-white/70 font-medium">Modo</th>
+                <th className="p-3 text-white/70 font-medium">Aviso</th>
+                <th className="p-3 text-white/70 font-medium">Vencimento</th>
+                <th className="p-3 text-white/70 font-medium text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredItems.map((r) => {
+                const accName = accounts.find((a:any)=>a.id===r.account_id)?.name || r.account_id;
+                const st = statusOf(r);
+                const statusColor = st === 'pago' ? 'text-green-600' : st === 'atrasado' ? 'text-red-600' : 'text-yellow-600';
+                
+                return (
+                  <tr key={r.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                    <td className="py-3 px-2">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${st === 'pago' ? 'bg-green-400' : st === 'atrasado' ? 'bg-red-400' : 'bg-yellow-400'}`}></span>
+                        <span className="font-medium">{r.description||'Gasto Fixo'}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-2 text-white/70">{accName}</td>
+                    <td className="py-3 px-2 font-mono font-semibold">{fmtCurrency(Number(r.amount||0))}</td>
+                    <td className="py-3 px-2 text-white/70">
+                      {editId===r.id ? (
+                        <select 
+                          className="p-1 bg-white/10 border border-white/20 rounded text-sm text-white" 
+                          value={editDraft.mode} 
+                          onChange={(e)=>setEditDraft({...editDraft, mode: e.target.value})}
+                        >
+                          <option value="manual">Manual</option>
+                          <option value="automatic">Automático</option>
+                        </select>
+                      ) : (
+                        (r.mode||'manual')==='automatic'?'Automático':'Manual'
+                      )}
+                    </td>
+                    <td className="py-3 px-2 text-white/70">
+                      {editId===r.id ? (
+                        <input 
+                          type="number" 
+                          min={0} 
+                          className="p-1 bg-white/10 border border-white/20 rounded text-sm w-20 text-white" 
+                          value={editDraft.notify_days} 
+                          onChange={(e)=>setEditDraft({...editDraft, notify_days: Number(e.target.value)})} 
+                        />
+                      ) : (
+                        `${Number(r.notify_days ?? 3)} dias`
+                      )}
+                    </td>
+                    <td className="py-3 px-2 text-white/70">
+                      {editId===r.id ? (
+                        <input 
+                          type="date" 
+                          className="p-1 bg-white/10 border border-white/20 rounded text-sm text-white" 
+                          value={editDraft.next_run} 
+                          onChange={(e)=>setEditDraft({...editDraft, next_run: e.target.value})} 
+                        />
+                      ) : new Date(r.next_run).toLocaleDateString('pt-BR')}
+                    </td>
+                    <td className="py-3 px-2 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        {(r.mode||'manual')==='manual' && st!=='pago' && (
+                          <ModernButton
+                            variant="success"
+                            size="sm"
+                            disabled={confirmingId===r.id}
+                            onClick={()=>confirmPay(r.id)}
+                          >
+                            {confirmingId===r.id ? 'Confirmando…' : 'Pagar'}
+                          </ModernButton>
+                        )}
+                        
+                        {editId===r.id ? (
+                          <>
+                            <ModernButton
+                              variant="primary"
+                              size="sm"
+                              onClick={async()=>{
+                                try {
+                                  await api.put('/api/v1/recurring', { 
+                                    id: r.id, 
+                                    mode: editDraft.mode, 
+                                    next_run: editDraft.next_run, 
+                                    notify_days: editDraft.notify_days 
+                                  });
+                                  setEditId(null);
+                                  await load();
+                                  showToast('success', 'Gasto fixo atualizado');
+                                } catch (e:any) {
+                                  const msg = e?.response?.data?.error?.message || e?.message || 'Falha ao salvar';
+                                  setError(msg);
+                                  showToast('error', msg);
+                                }
+                              }}
+                            >
+                              Salvar
+                            </ModernButton>
+                            <ModernButton
+                              variant="secondary"
+                              size="sm"
+                              onClick={()=>setEditId(null)}
+                            >
+                              Cancelar
+                            </ModernButton>
+                          </>
+                        ) : (
+                          <ModernButton
+                            variant="secondary"
+                            size="sm"
+                            onClick={()=>{ 
+                              setEditId(r.id); 
+                              setEditDraft({ 
+                                mode: (r.mode||'manual'), 
+                                next_run: r.next_run, 
+                                notify_days: Number(r.notify_days ?? 3) 
+                              }); 
+                            }}
+                          >
+                            Editar
+                          </ModernButton>
+                        )}
+                        
+                        <ModernButton
+                          variant="danger"
+                          size="sm"
+                          onClick={()=>del(r.id)}
+                        >
+                          Excluir
+                        </ModernButton>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          
+          {filteredItems.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-6xl mb-4">💳</div>
+              <div className="text-lg text-white/80 mb-2">Nenhum gasto encontrado</div>
+              <div className="text-sm text-white/60">Ajuste os filtros ou cadastre um novo gasto fixo</div>
+            </div>
+          )}
+        </div>
+      </ModernCard>
+
+      {/* Botão de executar automático */}
+      <div className="mt-6">
+        <ModernButton onClick={runAuto} variant="primary" className="flex items-center gap-2">
+          Processar automáticos
+        </ModernButton>
+        </div>
+    </ModernLayout>
   );
 }

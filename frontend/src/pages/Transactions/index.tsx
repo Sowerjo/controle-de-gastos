@@ -5,6 +5,20 @@ import { fmtCurrency, fmtDate } from '../../utils/format';
 import { notifyAccountsUpdate } from '../../hooks/useAccounts';
 import { useMonth } from '../../contexts/MonthContext';
 import MonthSelector from '../../components/MonthSelector';
+import ModernLayout, { ModernCard, ModernButton, ModernInput } from '../../components/Layout/ModernLayout';
+import { 
+  SearchIcon,
+  FilterIcon,
+  EditIcon,
+  TrashIcon,
+  ClearIcon,
+  TrendingUpIcon,
+  TrendingDownIcon,
+  CalendarIcon,
+  TagIcon,
+  CreditCardIcon,
+  UserIcon
+} from '../../components/Icons';
 
 type Tx = {
   id: number;
@@ -232,205 +246,472 @@ export default function Transactions() {
 
 
 
+  // Converte valores para número de forma segura (suporta "1.234,56" e números)
+  const toNumberBR = (v: any) => {
+    if (typeof v === 'number') return isNaN(v) ? 0 : v;
+    if (typeof v === 'string') {
+      const s = v.trim().replace(/\./g, '').replace(',', '.');
+      const n = Number(s);
+      return isNaN(n) ? 0 : n;
+    }
+    const n = Number(v ?? 0);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const totalReceitas = items
+    .filter(t => t.tipo === 'receita')
+    .reduce((sum, t) => sum + toNumberBR((t as any).valor ?? (t as any).amount ?? 0), 0);
+  const totalDespesas = items
+    .filter(t => t.tipo === 'despesa')
+    .reduce((sum, t) => sum + toNumberBR((t as any).valor ?? (t as any).amount ?? 0), 0);
+  // Alguns backends/importações podem fornecer valores em centavos (ex.: 114550 para 1.145,50)
+  // Detecta esse caso e ajusta a escala para exibição correta.
+  const needsCentScale = (() => {
+    const values = items
+      .filter(t => t.tipo === 'receita' || t.tipo === 'despesa')
+      .map(t => (t as any).valor ?? (t as any).amount)
+      .filter(v => v !== undefined && v !== null)
+      .map(v => (typeof v === 'number' ? v : toNumberBR(v)));
+    // Heurística: muitos valores inteiros altos cuja última parte não é múltipla de 100
+    return values.some(v => Number.isInteger(v) && Math.abs(v) >= 1000 && Math.abs(v) % 100 !== 0);
+  })();
+
+  const totalReceitasDisplay = needsCentScale ? totalReceitas / 100 : totalReceitas;
+  const totalDespesasDisplay = needsCentScale ? totalDespesas / 100 : totalDespesas;
+  const saldo = toNumberBR(totalReceitasDisplay) - toNumberBR(totalDespesasDisplay);
+
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h1 className="text-lg font-semibold">Transações</h1>
-        <MonthSelector />
+    <ModernLayout 
+      title="Transações" 
+      subtitle={`${items.length} transações • Saldo: ${fmtCurrency(saldo)}`}
+      headerActions={<MonthSelector />}
+    >
+      {/* Resumo financeiro */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <ModernCard className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+              <TrendingUpIcon className="text-white" size={20} />
+            </div>
+            <div>
+              <p className="text-white/70 text-sm">Receitas</p>
+              <p className="text-lg font-bold text-green-400">{fmtCurrency(totalReceitasDisplay)}</p>
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-gradient-to-r from-red-500 to-pink-500 rounded-lg flex items-center justify-center">
+              <TrendingDownIcon className="text-white" size={20} />
+            </div>
+            <div>
+              <p className="text-white/70 text-sm">Despesas</p>
+              <p className="text-lg font-bold text-red-400">{fmtCurrency(totalDespesasDisplay)}</p>
+            </div>
+          </div>
+        </ModernCard>
+
+        <ModernCard className="p-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 bg-gradient-to-r ${saldo >= 0 ? 'from-blue-500 to-cyan-500' : 'from-orange-500 to-red-500'} rounded-lg flex items-center justify-center`}>
+              <CreditCardIcon className="text-white" size={20} />
+            </div>
+            <div>
+              <p className="text-white/70 text-sm">Saldo</p>
+              <p className={`text-lg font-bold ${saldo >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                {fmtCurrency(saldo)}
+              </p>
+            </div>
+          </div>
+        </ModernCard>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2 -mx-1 px-1">
-        <select className="input px-2 py-2 min-w-[140px]" value={accountId} onChange={(e)=>setAccountId(e.target.value? Number(e.target.value): '')}>
-          <option value="">Todas contas</option>
-          {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
-        </select>
-        <select className="input px-2 py-2 min-w-[140px]" value={tipo} onChange={(e)=>setTipo(e.target.value as any)}>
-          <option value="all">Todos tipos</option>
-          <option value="receita">Receitas</option>
-          <option value="despesa">Despesas</option>
-        </select>
-        <select className="input px-2 py-2 min-w-[160px]" value={categoriaId} onChange={(e)=>setCategoriaId(e.target.value? Number(e.target.value): '')}>
-          <option value="">Todas categorias</option>
-          {categories.map((c:any)=> (<option key={c.id} value={c.id}>{c.name}</option>))}
-        </select>
+      {/* Filtros */}
+      <ModernCard className="mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+            <FilterIcon className="text-white" size={16} />
+          </div>
+          <h3 className="text-lg font-semibold text-white">Filtros</h3>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Conta</label>
+            <select 
+              className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+              value={accountId} 
+              onChange={(e)=>setAccountId(e.target.value? Number(e.target.value): '')}
+            >
+              <option value="" className="bg-gray-800 text-white">Todas contas</option>
+              {accounts.map((a:any)=> (
+                <option key={a.id} value={a.id} className="bg-gray-800 text-white">{a.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Tipo</label>
+            <select 
+              className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+              value={tipo} 
+              onChange={(e)=>setTipo(e.target.value as any)}
+            >
+              <option value="all" className="bg-gray-800 text-white">Todos tipos</option>
+              <option value="receita" className="bg-gray-800 text-white">Receitas</option>
+              <option value="despesa" className="bg-gray-800 text-white">Despesas</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-white/90">Categoria</label>
+            <select 
+              className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+              value={categoriaId} 
+              onChange={(e)=>setCategoriaId(e.target.value? Number(e.target.value): '')}
+            >
+              <option value="" className="bg-gray-800 text-white">Todas categorias</option>
+              {categories.map((c:any)=> (
+                <option key={c.id} value={c.id} className="bg-gray-800 text-white">{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <ModernInput
+            label="Buscar"
+            value={q}
+            onChange={(e)=>setQ(e.target.value)}
+            placeholder="Buscar transações..."
+            icon={<SearchIcon className="text-white/50" size={18} />}
+          />
+        </div>
+
         {(accountId || tipo !== 'all' || categoriaId || q) && (
-          <button 
-            className="px-3 py-2 rounded border border-white/10 hover:bg-white/5 text-xs whitespace-nowrap"
+          <ModernButton
+            variant="secondary"
             onClick={() => {
               setAccountId('');
               setTipo('all');
               setCategoriaId('');
               setQ('');
             }}
-            title="Limpar filtros"
+            className="w-full md:w-auto"
           >
-            Limpar
-          </button>
+            <ClearIcon size={16} />
+            Limpar filtros
+          </ModernButton>
         )}
-        <input className="input px-3 py-2 min-w-[180px]" placeholder="Buscar" value={q} onChange={(e)=>setQ(e.target.value)} />
-      </div>
+      </ModernCard>
 
-      <div className="divide-y divide-white/5">
+      {/* Lista de transações */}
+      <div className="space-y-3">
         {items.map((t) => (
-          <div key={t.id} className="py-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-medium">
-                {t.descricao || t.payee?.name || '—'}
+          <ModernCard key={t.id} className="p-4 hover:bg-white/5 transition-all duration-200">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                  t.tipo === 'receita' 
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                    : 'bg-gradient-to-r from-red-500 to-pink-500'
+                }`}>
+                  {t.tipo === 'receita' ? (
+                    <TrendingUpIcon className="text-white" size={18} />
+                  ) : (
+                    <TrendingDownIcon className="text-white" size={18} />
+                  )}
+                </div>
+                
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-medium truncate">
+                    {t.descricao || t.payee?.name || '—'}
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-white/70">
+                    <CalendarIcon size={14} />
+                    <span>{fmtDate(t.data)}</span>
+                    {t.categoria?.name && (
+                      <>
+                        <span>•</span>
+                        <TagIcon size={14} />
+                        <span>{t.categoria.name}</span>
+                      </>
+                    )}
+                    {t.conta?.name && (
+                      <>
+                        <span>•</span>
+                        <CreditCardIcon size={14} />
+                        <span className="truncate">{t.conta.name}</span>
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="text-xs text-[color:var(--text-dim)]">
-                {fmtDate(t.data)} · {t.categoria?.name || 'Sem categoria'} {t.conta?.name ? `· ${t.conta.name}` : ''}
+
+              <div className="flex items-center gap-3">
+                <div className={`text-lg font-bold tnum ${
+                  t.tipo === 'despesa' ? 'text-red-400' : 'text-green-400'
+                }`}>
+                  {t.tipo === 'despesa' ? '-' : '+'}{fmtCurrency(Number(t.valor||0))}
+                </div>
+                
+                <div className="flex gap-2">
+                  <ModernButton
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => openEdit(t)}
+                    className="!p-2"
+                  >
+                    <EditIcon size={16} />
+                  </ModernButton>
+                  <ModernButton
+                    variant="danger"
+                    size="sm"
+                    onClick={() => removeTx(t.id)}
+                    className="!p-2"
+                  >
+                    <TrashIcon size={16} />
+                  </ModernButton>
+                </div>
               </div>
             </div>
-            <div className={`tnum text-sm ${t.tipo==='despesa' ? 'text-red-400' : 'text-emerald-400'}`}>{fmtCurrency(Number(t.valor||0))}</div>
-            <div className="ml-3 flex gap-2">
-              <button className="text-xs text-[color:var(--text-dim)] hover:text-sky-300" onClick={()=>openEdit(t)}>Editar</button>
-              <button className="text-xs text-[color:var(--text-dim)] hover:text-red-300" onClick={()=>removeTx(t.id)}>Excluir</button>
-            </div>
-          </div>
+          </ModernCard>
         ))}
+        
         {!items.length && !loading && (
-          <div className="py-8 text-center text-[color:var(--text-dim)]">Sem transações neste período.</div>
+          <ModernCard className="p-8 text-center">
+            <div className="text-white/70">
+              <UserIcon className="mx-auto mb-3 text-white/50" size={48} />
+              <p className="text-lg font-medium mb-2">Nenhuma transação encontrada</p>
+              <p className="text-sm">Não há transações para o período selecionado.</p>
+            </div>
+          </ModernCard>
         )}
       </div>
 
       {editing && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50" onClick={()=>setEditing(null)}>
-          <div className="bg-[color:var(--card)] w-full sm:max-w-2xl sm:rounded shadow-xl max-h-[90vh] overflow-auto" onClick={(e)=>e.stopPropagation()}>
-            <div className="sticky top-0 bg-[color:var(--card)] p-4 border-b border-white/10 font-semibold flex items-center justify-between">
-              <span>Editar Transação</span>
-              <button className="text-sm text-[color:var(--text-dim)] hover:text-[color:var(--text)]" onClick={()=>setEditing(null)}>×</button>
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end sm:items-center justify-center z-50" onClick={()=>setEditing(null)}>
+          <div className="bg-gradient-to-br from-gray-900/95 to-gray-800/95 backdrop-blur-xl border border-white/20 w-full sm:max-w-2xl sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-auto" onClick={(e)=>e.stopPropagation()}>
+            <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-600 p-6 border-b border-white/10">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
+                    <EditIcon className="text-white" size={18} />
+                  </div>
+                  <h2 className="text-xl font-bold text-white">Editar Transação</h2>
+                </div>
+                <ModernButton
+                  variant="secondary"
+                  onClick={() => setEditing(null)}
+                  className="!p-2"
+                >
+                  ×
+                </ModernButton>
+              </div>
             </div>
             <div className="p-6 space-y-6">
               {/* Seção: Valor e Tipo */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-[color:var(--text-dim)]">Valor e Tipo</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Valor:</label>
-                    <input 
-                      className="input w-full text-lg py-3 tnum" 
-                      value={form.valor||''} 
-                      onChange={(e)=>setForm({...form, valor:e.target.value})} 
-                      placeholder="0,00"
-                      inputMode="decimal"
-                      autoFocus
-                    />
-                    <div className="text-xs text-[color:var(--text-dim)] mt-1">Use vírgula para decimais (ex: 30,50)</div>
+              <ModernCard className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-blue-500 rounded-lg flex items-center justify-center">
+                    <CreditCardIcon className="text-white" size={16} />
                   </div>
-                  <div>
-                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Tipo:</label>
-                    <div className="flex rounded-md overflow-hidden border border-white/10">
+                  <h3 className="text-lg font-semibold text-white">Valor e Tipo</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <ModernInput
+                    label="Valor"
+                    value={form.valor||''}
+                    onChange={(e)=>setForm({...form, valor:e.target.value})}
+                    placeholder="0,00"
+                    className="text-lg tnum"
+                    autoFocus
+                    helperText="Use vírgula para decimais (ex: 30,50)"
+                  />
+                  
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-white/90">Tipo</label>
+                    <div className="flex rounded-lg overflow-hidden border border-white/20">
                       <button 
                         type="button"
-                        className={`flex-1 py-3 px-3 text-sm font-medium transition-colors ${form.tipo === 'receita' ? 'bg-emerald-600 text-white' : 'hover:bg-white/5'}`}
+                        className={`flex-1 py-3 px-4 text-sm font-medium transition-all duration-200 ${
+                          form.tipo === 'receita' 
+                            ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-lg' 
+                            : 'bg-white/10 text-white/70 hover:bg-white/20'
+                        }`}
                         onClick={() => setForm({...form, tipo: 'receita'})}
                       >
+                        <TrendingUpIcon size={16} className="inline mr-2" />
                         Receita
                       </button>
                       <button 
                         type="button"
-                        className={`flex-1 py-3 px-3 text-sm font-medium transition-colors ${form.tipo === 'despesa' ? 'bg-rose-600 text-white' : 'hover:bg-white/5'}`}
+                        className={`flex-1 py-3 px-4 text-sm font-medium transition-all duration-200 ${
+                          form.tipo === 'despesa' 
+                            ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white shadow-lg' 
+                            : 'bg-white/10 text-white/70 hover:bg-white/20'
+                        }`}
                         onClick={() => setForm({...form, tipo: 'despesa'})}
                       >
+                        <TrendingDownIcon size={16} className="inline mr-2" />
                         Despesa
                       </button>
                     </div>
                   </div>
                 </div>
-              </div>
+              </ModernCard>
               
               {/* Seção: Data e Status */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-[color:var(--text-dim)]">Data e Status</div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Data:</label>
-                    <input type="date" className="input w-full py-2" value={form.data||''} onChange={(e)=>setForm({...form, data:e.target.value})} />
+              <ModernCard className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-purple-500 to-pink-500 rounded-lg flex items-center justify-center">
+                    <CalendarIcon className="text-white" size={16} />
                   </div>
-                  <div>
-                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Status:</label>
-                    <select className="input w-full py-2" value={form.status} onChange={(e)=>setForm({...form, status:e.target.value})}>
-                      <option value="CLEARED">Compensada</option>
-                      <option value="PENDING">Pendente</option>
-                      <option value="RECONCILED">Conferida</option>
+                  <h3 className="text-lg font-semibold text-white">Data e Status</h3>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-white/90">Data</label>
+                    <input 
+                      type="date" 
+                      className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+                      value={form.data||''} 
+                      onChange={(e)=>setForm({...form, data:e.target.value})} 
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-white/90">Status</label>
+                    <select 
+                      className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+                      value={form.status} 
+                      onChange={(e)=>setForm({...form, status:e.target.value})}
+                    >
+                      <option value="CLEARED" className="bg-gray-800 text-white">Compensada</option>
+                      <option value="PENDING" className="bg-gray-800 text-white">Pendente</option>
+                      <option value="RECONCILED" className="bg-gray-800 text-white">Conferida</option>
                     </select>
                   </div>
                 </div>
-              </div>
+              </ModernCard>
               
               {/* Seção: Descrição */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-[color:var(--text-dim)]">Descrição</div>
-                <input className="input w-full py-2" placeholder="Descrição da transação" value={form.descricao||''} onChange={(e)=>setForm({...form, descricao:e.target.value})} />
-              </div>
+              <ModernCard className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-cyan-500 rounded-lg flex items-center justify-center">
+                    <EditIcon className="text-white" size={16} />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Descrição</h3>
+                </div>
+                
+                <ModernInput
+                  label="Descrição da transação"
+                  value={form.descricao||''}
+                  onChange={(e)=>setForm({...form, descricao:e.target.value})}
+                  placeholder="Digite uma descrição..."
+                />
+              </ModernCard>
               
               {/* Seção: Conta e Categoria */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-[color:var(--text-dim)]">Conta e Categoria</div>
+              <ModernCard className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-orange-500 to-red-500 rounded-lg flex items-center justify-center">
+                    <TagIcon className="text-white" size={16} />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Conta e Categoria</h3>
+                </div>
+                
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Conta:</label>
-                    <select className="input w-full py-2" value={form.accountId||''} onChange={(e)=>setForm({...form, accountId:e.target.value?Number(e.target.value):''})}>
-                      <option value="">Selecione uma conta…</option>
-                      {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-white/90">Conta</label>
+                    <select 
+                      className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+                      value={form.accountId||''} 
+                      onChange={(e)=>setForm({...form, accountId:e.target.value?Number(e.target.value):''})}
+                    >
+                      <option value="" className="bg-gray-800 text-white">Selecione uma conta…</option>
+                      {accounts.map((a:any)=> (
+                        <option key={a.id} value={a.id} className="bg-gray-800 text-white">{a.name}</option>
+                      ))}
                     </select>
                   </div>
-                  <div>
-                    <label className="text-xs text-[color:var(--text-dim)] mb-2 block">Categoria:</label>
-                    <select className="input w-full py-2" value={form.categoryId||''} onChange={(e)=>setForm({...form, categoryId:e.target.value?Number(e.target.value):''})}>
-                      <option value="">Selecione uma categoria…</option>
-                      {categories.map((c:any)=> (<option key={c.id} value={c.id}>{c.name}</option>))}
+                  
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-white/90">Categoria</label>
+                    <select 
+                      className="w-full pl-4 pr-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+                      value={form.categoryId||''} 
+                      onChange={(e)=>setForm({...form, categoryId:e.target.value?Number(e.target.value):''})}
+                    >
+                      <option value="" className="bg-gray-800 text-white">Selecione uma categoria…</option>
+                      {categories.map((c:any)=> (
+                        <option key={c.id} value={c.id} className="bg-gray-800 text-white">{c.name}</option>
+                      ))}
                     </select>
                   </div>
                 </div>
-              </div>
+              </ModernCard>
               
               {/* Seção: Favorecido */}
-              <div className="space-y-3">
-                <div className="text-sm font-medium text-[color:var(--text-dim)]">Favorecido</div>
-                <input className="input w-full py-2" placeholder="Nome do favorecido" value={form.payeeName||''} onChange={(e)=>setForm({...form, payeeName:e.target.value})} />
-              </div>
+              <ModernCard className="p-4">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-8 h-8 bg-gradient-to-r from-indigo-500 to-purple-500 rounded-lg flex items-center justify-center">
+                    <UserIcon className="text-white" size={16} />
+                  </div>
+                  <h3 className="text-lg font-semibold text-white">Favorecido</h3>
+                </div>
+                
+                <ModernInput
+                  label="Nome do favorecido"
+                  value={form.payeeName||''}
+                  onChange={(e)=>setForm({...form, payeeName:e.target.value})}
+                  placeholder="Digite o nome do favorecido..."
+                />
+              </ModernCard>
             </div>
+            
             {editError && (
-               <div className="px-6 pb-2 text-sm text-red-400 bg-red-50/10 border border-red-500/20 rounded-md p-3">{editError}</div>
-             )}
-             <div className="sticky bottom-0 bg-[color:var(--card)] p-6 border-t border-white/10 flex justify-end gap-3">
-               <button 
-                 className="px-6 py-3 rounded-lg border border-white/10 hover:bg-white/5 transition-colors font-medium" 
-                 onClick={()=>setEditing(null)} 
+              <div className="mx-6 mb-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
+                <p className="text-red-400 text-sm">{editError}</p>
+              </div>
+            )}
+            
+            <div className="sticky bottom-0 bg-gradient-to-r from-gray-900/95 to-gray-800/95 backdrop-blur-xl p-6 border-t border-white/10 flex justify-end gap-3">
+              <ModernButton
+                variant="secondary"
+                onClick={() => setEditing(null)}
+                disabled={savingEdit}
+              >
+                Cancelar
+              </ModernButton>
+              <ModernButton
+                 variant="primary"
+                 onClick={saveEdit}
                  disabled={savingEdit}
+                 loading={savingEdit}
                >
-                 Cancelar
-               </button>
-               <button 
-                  className="px-6 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white transition-colors font-medium disabled:opacity-50" 
-                  onClick={saveEdit} 
-                  disabled={savingEdit}
-                >
-                  {savingEdit ? (
-                    <div className="flex items-center justify-center gap-2">
-                      <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="m4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Salvando…
-                    </div>
-                  ) : 'Salvar Alterações'}
-                </button>
+                 Salvar alterações
+               </ModernButton>
              </div>
-          </div>
-        </div>
-      )}
-
+           </div>
+         </div>
+       )}
+      {/* Paginação */}
       <div className="py-4 flex justify-center">
         {hasMore ? (
-          <button disabled={loading} className="px-4 py-2 rounded border border-white/10" onClick={()=>fetchPage(page)}>
-            {loading ? 'Carregando…' : 'Carregar mais'}
-          </button>
+          <ModernButton
+            variant="secondary"
+            onClick={() => fetchPage(page)}
+            disabled={loading}
+            loading={loading}
+          >
+            Carregar mais
+          </ModernButton>
         ) : (
-          <div className="text-sm text-[color:var(--text-dim)]">Fim da lista</div>
+          <div className="text-white/70 text-sm">Fim da lista</div>
         )}
       </div>
-    </div>
+    </ModernLayout>
   );
 }

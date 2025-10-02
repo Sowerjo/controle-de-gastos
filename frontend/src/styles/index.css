@@ -15,7 +15,8 @@
   --pos: #22C55E;
   --neg: #F43F5E;
   --warn: #F59E0B;
-  --brd: rgba(255,255,255,.06);
+  /* Borda fixa (não muda com o tema): tom translúcido harmonizado */
+  --brd: color-mix(in oklab, #06b6d4 32%, #d946ef 28%, transparent);
 
   --radius-xs: 8px;
   --radius-sm: 12px;
@@ -41,7 +42,8 @@
   --pos: #16A34A;
   --neg: #DC2626;
   --warn: #EA580C;
-  --brd: rgba(0,0,0,.08);
+  /* Mesma borda para o tema claro, evitando alternância preto/branco */
+  --brd: color-mix(in oklab, #06b6d4 32%, #d946ef 28%, transparent);
 
   --shadow-1: 0 4px 16px rgba(0, 0, 0, .08);
   --shadow-glow: 0 0 24px rgba(14, 165, 233, .15);

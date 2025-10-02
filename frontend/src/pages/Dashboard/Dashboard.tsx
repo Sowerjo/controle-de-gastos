@@ -7,6 +7,17 @@ import { useGoals } from '../../hooks/useGoals';
 import { useAccounts } from '../../hooks/useAccounts';
 import { useMonth } from '../../contexts/MonthContext';
 import MonthSelector from '../../components/MonthSelector';
+import ModernLayout, { ModernCard, ModernButton } from '../../components/Layout/ModernLayout';
+import { 
+  TrendingUpIcon,
+  TrendingDownIcon,
+  CreditCardIcon,
+  CalendarIcon,
+  TargetIcon,
+  ChartBarIcon,
+  PlusIcon,
+  EyeIcon
+} from '../../components/Icons';
 
 // Componente para exibir gráfico de tendências
 function TrendChart({ data }: { data: any[] }) {
@@ -85,6 +96,7 @@ export default function Dashboard() {
   const [fixedForecast, setFixedForecast] = useState<number>(0);
   const [fixedOverview, setFixedOverview] = useState<{ category: string; total: number; count: number }[]>([]);
   const [fixedStatusCounts, setFixedStatusCounts] = useState<{ pago: number; pendente: number; atrasado: number }>({ pago: 0, pendente: 0, atrasado: 0 });
+  const [fixedStatusTotals, setFixedStatusTotals] = useState<{ pago: number; pendente: number; atrasado: number }>({ pago: 0, pendente: 0, atrasado: 0 });
 
   useEffect(() => {
     (async () => {
@@ -180,12 +192,16 @@ export default function Dashboard() {
         const onlyExpenses = items.filter(it => it.type === 'DESPESA');
 
         let pago = 0, pendente = 0, atrasado = 0;
+        let totalPago = 0, totalPendente = 0, totalAtrasado = 0;
 
         const agg = new Map<string, { total: number; count: number }>();
         for (const r of onlyExpenses) {
           // Usar payment_status diretamente do backend (já corrigido)
           const st = r.payment_status || 'pendente';
-          if (st === 'pago') pago++; else if (st === 'pendente') pendente++; else atrasado++;
+          const amt = Number(r.amount || 0);
+          if (st === 'pago') { pago++; totalPago += amt; }
+          else if (st === 'pendente') { pendente++; totalPendente += amt; }
+          else { atrasado++; totalAtrasado += amt; }
           const name = r.category_id ? (catMap.get(Number(r.category_id)) || 'Sem categoria') : 'Sem categoria';
           const cur = agg.get(name) || { total: 0, count: 0 };
           cur.total += Number(r.amount || 0);
@@ -197,6 +213,7 @@ export default function Dashboard() {
         list.sort((a, b) => b.total - a.total);
         setFixedOverview(list);
         setFixedStatusCounts({ pago, pendente, atrasado });
+        setFixedStatusTotals({ pago: totalPago, pendente: totalPendente, atrasado: totalAtrasado });
       } catch (error) {
         // Em caso de erro (backend não disponível), usar dados de exemplo
         const mockData = [
@@ -207,6 +224,7 @@ export default function Dashboard() {
         ];
         setFixedOverview(mockData);
         setFixedStatusCounts({ pago: 4, pendente: 5, atrasado: 1 });
+        setFixedStatusTotals({ pago: 0, pendente: 0, atrasado: 0 });
       }
     })();
   }, [from, to, month]);
@@ -215,44 +233,112 @@ export default function Dashboard() {
   const fixedMaxTotal = Math.max(1, ...fixedOverview.map(x => x.total));
 
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="heading text-2xl">Dashboard</h1>
-        <MonthSelector />
-      </div>
+    <ModernLayout
+      title="Dashboard"
+      subtitle="Visão geral das suas finanças"
+      headerActions={<MonthSelector />}
+    >
       {loading ? (
-        <div>Carregando…</div>
+        <div className="flex items-center justify-center py-12">
+          <div className="text-white/70">Carregando dados...</div>
+        </div>
       ) : summary ? (
         <>
-          <div className="grid sm:grid-cols-4 gap-4 mb-6">
-            <Card title="Saldo atual" value={fmtCurrency(totalBalance)} />
-            <Card title="Receitas (mês)" value={fmtCurrency(summary.receitas ?? summary.totalReceitas ?? 0)} pos />
-            <Card title="Despesas (mês)" value={fmtCurrency(summary.despesas ?? summary.totalDespesas ?? 0)} neg />
-            <Card title="Gastos fixos previstos" value={fmtCurrency(fixedForecast)} neg />
+          {/* Cards de resumo financeiro */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-blue-500/20 border border-blue-500/30">
+                  <CreditCardIcon className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-white/70 text-sm">Saldo atual</p>
+                  <p className="text-2xl font-bold text-white">{fmtCurrency(totalBalance)}</p>
+                </div>
+              </div>
+            </ModernCard>
+
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-green-500/20 border border-green-500/30">
+                  <TrendingUpIcon className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <p className="text-white/70 text-sm">Receitas (mês)</p>
+                  <p className="text-2xl font-bold text-green-400">{fmtCurrency(summary.receitas ?? summary.totalReceitas ?? 0)}</p>
+                </div>
+              </div>
+            </ModernCard>
+
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30">
+                  <TrendingDownIcon className="w-6 h-6 text-red-400" />
+                </div>
+                <div>
+                  <p className="text-white/70 text-sm">Despesas (mês)</p>
+                  <p className="text-2xl font-bold text-red-400">{fmtCurrency(summary.despesas ?? summary.totalDespesas ?? 0)}</p>
+                </div>
+              </div>
+            </ModernCard>
+
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-purple-500/20 border border-purple-500/30">
+                  <CalendarIcon className="w-6 h-6 text-purple-400" />
+                </div>
+                <div>
+                  <p className="text-white/70 text-sm">Gastos fixos previstos</p>
+                  <p className="text-2xl font-bold text-purple-400">{fmtCurrency(fixedForecast)}</p>
+                </div>
+              </div>
+            </ModernCard>
           </div>
           {/* Gráfico de tendências dos últimos 6 meses */}
-          <div className="card p-4 mb-6">
-            <div className="text-sm text-[color:var(--text-dim)] mb-2">Tendência de receitas e despesas (últimos 6 meses)</div>
-            {summary.trends && summary.trends.length > 0 ? (
-              <TrendChart data={summary.trends} />
-            ) : (
-              <div className="text-sm text-[color:var(--text-dim)]">Sem dados de tendência disponíveis</div>
-            )}
-            <div className="flex justify-center gap-6 mt-4 text-sm">
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
-                <span>Receitas</span>
+          <ModernCard className="p-6 mb-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30">
+                <ChartBarIcon className="w-5 h-5 text-cyan-400" />
               </div>
-              <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 rounded-full bg-red-500"></span>
-                <span>Despesas</span>
+              <div>
+                <h3 className="text-lg font-semibold text-white">Tendência Financeira</h3>
+                <p className="text-white/70 text-sm">Receitas e despesas dos últimos 6 meses</p>
               </div>
             </div>
-          </div>
+            
+            {summary.trends && summary.trends.length > 0 ? (
+              <div className="space-y-4">
+                <TrendChart data={summary.trends} />
+                <div className="flex justify-center gap-6 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-full bg-green-500"></span>
+                    <span className="text-white/70">Receitas</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="inline-block w-3 h-3 rounded-full bg-red-500"></span>
+                    <span className="text-white/70">Despesas</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <ChartBarIcon className="w-12 h-12 text-white/30 mx-auto mb-3" />
+                <p className="text-white/70">Sem dados de tendência disponíveis</p>
+              </div>
+            )}
+          </ModernCard>
           
-          <div className="grid md:grid-cols-2 gap-6 mb-6">
-            <div className="card p-4">
-              <div className="text-sm text-[color:var(--text-dim)] mb-2">Principais categorias de despesas</div>
+          <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+                  <ChartBarIcon className="w-5 h-5 text-orange-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Principais Categorias</h3>
+                  <p className="text-white/70 text-sm">Despesas por categoria</p>
+                </div>
+              </div>
               <Donut data={catData} onSliceClick={(label) => {
                 try {
                   const cats = (window as any).__CATS || [];
@@ -261,92 +347,107 @@ export default function Dashboard() {
                   navigate(`/transactions?categoryId=${id}`);
                 } catch {}
               }} />
-            </div>
-            <div className="card p-4">
-              <div className="text-sm text-[color:var(--text-dim)] mb-2">Saldos por conta</div>
+            </ModernCard>
+            
+            <ModernCard className="p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-lg bg-blue-500/20 border border-blue-500/30">
+                  <CreditCardIcon className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Saldos por Conta</h3>
+                  <p className="text-white/70 text-sm">Movimentação e saldos atuais</p>
+                </div>
+              </div>
+              
               <div className="overflow-auto">
-                <table className="min-w-[480px] w-full text-sm">
+                <table className="w-full text-sm">
                   <thead>
-                    <tr className="text-left">
-                      <th className="p-2">Conta</th>
-                      <th className="p-2">Tipo</th>
-                      <th className="p-2">Mov. Mês</th>
-                      <th className="p-2">Saldo</th>
+                    <tr className="text-left border-b border-white/10">
+                      <th className="p-3 text-white/70 font-medium">Conta</th>
+                      <th className="p-3 text-white/70 font-medium">Tipo</th>
+                      <th className="p-3 text-white/70 font-medium">Mov. Mês</th>
+                      <th className="p-3 text-white/70 font-medium">Saldo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(summary.accounts || accounts || []).map((a: any) => (
-                      <tr key={a.id} className="border-t border-white/5">
-                        <td className="p-2">{a.name}</td>
-                        <td className="p-2">{a.type}</td>
-                        <td className="p-2 tnum">
-                          <span className={a.month_movement > 0 ? 'text-[color:var(--pos)]' : a.month_movement < 0 ? 'text-[color:var(--neg)]' : ''}>
+                      <tr key={a.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td className="p-3 text-white font-medium">{a.name}</td>
+                        <td className="p-3 text-white/70">{a.type}</td>
+                        <td className="p-3 font-mono">
+                          <span className={a.month_movement > 0 ? 'text-green-400' : a.month_movement < 0 ? 'text-red-400' : 'text-white/70'}>
                             {fmtCurrency(Number(a.month_movement||0))}
                           </span>
                         </td>
-                        <td className="p-2 tnum">{fmtCurrency(Number(a.balance||0))}</td>
+                        <td className="p-3 font-mono text-white font-semibold">{fmtCurrency(Number(a.balance||0))}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-            </div>
+            </ModernCard>
           </div>
 
           {/* Card: Gastos Fixos - Visão Geral */}
-          <div className="card p-6 mb-6 hover:bg-white/[0.02] transition-all duration-200 border border-white/5 hover:border-white/10">
+          <ModernCard className="p-6 mb-8">
             {/* Header melhorado */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500/20 to-pink-500/20 border border-purple-500/20">
-                  <span className="text-lg">💳</span>
+                <div className="p-3 rounded-xl bg-purple-500/20 border border-purple-500/30">
+                  <CreditCardIcon className="w-6 h-6 text-purple-400" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-lg heading">Gastos Fixos</h3>
-                  <p className="text-xs text-[color:var(--text-dim)]">Visão geral dos gastos recorrentes</p>
+                  <h3 className="text-lg font-semibold text-white">Gastos Fixos</h3>
+                  <p className="text-white/70 text-sm">Visão geral dos gastos recorrentes</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button 
+                <ModernButton
+                  variant="secondary"
+                  size="sm"
                   onClick={() => navigate('/fixed-dashboard')}
-                  className="text-xs px-3 py-1.5 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 hover:border-white/20 transition-all duration-200 flex items-center gap-1.5"
-                  title="Ver dashboard detalhado"
+                  className="flex items-center gap-2"
                 >
-                  <span>📊</span>
-                  <span>Dashboard</span>
-                </button>
-                <button 
+                  <ChartBarIcon className="w-4 h-4" />
+                  Dashboard
+                </ModernButton>
+                <ModernButton
+                  variant="primary"
+                  size="sm"
                   onClick={() => navigate('/fixed')}
-                  className="text-xs px-3 py-1.5 bg-purple-500/20 hover:bg-purple-500/30 rounded-lg border border-purple-500/30 hover:border-purple-500/40 transition-all duration-200 flex items-center gap-1.5"
-                  title="Gerenciar gastos fixos"
+                  className="flex items-center gap-2"
                 >
-                  <span>⚙️</span>
-                  <span>Gerenciar</span>
-                </button>
+                  <PlusIcon className="w-4 h-4" />
+                  Gerenciar
+                </ModernButton>
               </div>
             </div>
 
             {fixedOverview.length > 0 ? (
               <>
                 {/* Resumo de status */}
-                <div className="grid grid-cols-3 gap-3 mb-4">
-                  <div className="bg-green-500/10 border border-green-500/20 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-green-400">{fixedStatusCounts.pago}</div>
-                    <div className="text-xs text-green-300/80">✅ Pagos</div>
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="text-center p-4 rounded-xl bg-green-500/10 border border-green-500/20 backdrop-blur-sm">
+                    <div className="text-2xl font-bold text-green-400">{fixedStatusCounts.pago}</div>
+                    <div className="text-sm text-green-300 mt-1">Pagos</div>
+                    <div className="text-xs text-green-300 mt-1">{fmtCurrency(fixedStatusTotals.pago)}</div>
                   </div>
-                  <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-amber-400">{fixedStatusCounts.pendente}</div>
-                    <div className="text-xs text-amber-300/80">⏳ Pendentes</div>
+                  <div className="text-center p-4 rounded-xl bg-yellow-500/10 border border-yellow-500/20 backdrop-blur-sm">
+                    <div className="text-2xl font-bold text-yellow-400">{fixedStatusCounts.pendente}</div>
+                    <div className="text-sm text-yellow-300 mt-1">Pendentes</div>
+                    <div className="text-xs text-yellow-300 mt-1">{fmtCurrency(fixedStatusTotals.pendente)}</div>
                   </div>
-                  <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center">
-                    <div className="text-lg font-bold text-red-400">{fixedStatusCounts.atrasado}</div>
-                    <div className="text-xs text-red-300/80">🔴 Atrasados</div>
+                  <div className="text-center p-4 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-sm">
+                    <div className="text-2xl font-bold text-red-400">{fixedStatusCounts.atrasado}</div>
+                    <div className="text-sm text-red-300 mt-1">Vencidos</div>
+                    <div className="text-xs text-red-300 mt-1">{fmtCurrency(fixedStatusTotals.atrasado)}</div>
                   </div>
                 </div>
 
                 {/* Lista de categorias melhorada */}
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between text-xs text-[color:var(--text-dim)] border-b border-white/10 pb-2">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between text-xs text-white/70 border-b border-white/10 pb-2">
                     <span>Categoria</span>
                     <span>Valor Total</span>
                   </div>
@@ -356,22 +457,22 @@ export default function Dashboard() {
                     const categoryPct = Math.round((row.total / totalFixedAmount) * 100);
                     
                     return (
-                      <div key={row.category} className="group hover:bg-white/5 rounded-lg p-2 transition-all duration-200">
+                      <div key={row.category} className="group hover:bg-white/5 rounded-xl p-4 transition-all duration-200 border border-white/10 hover:border-white/20 backdrop-blur-sm">
                         <div className="flex items-center gap-3">
                           <div className="flex items-center gap-2 flex-1 min-w-0">
-                            <span className="text-sm">#{index + 1}</span>
+                            <span className="text-sm text-purple-400">#{index + 1}</span>
                             <div className="min-w-0 flex-1">
-                              <div className="font-medium text-sm truncate">{row.category}</div>
-                              <div className="text-xs text-[color:var(--text-dim)]">
+                              <div className="font-medium text-sm truncate text-white">{row.category}</div>
+                              <div className="text-xs text-white/70">
                                 {row.count} {row.count > 1 ? 'gastos' : 'gasto'} • {categoryPct}% do total
                               </div>
                             </div>
                           </div>
                           <div className="text-right">
-                            <div className="font-semibold text-sm tnum">{fmtCurrency(row.total)}</div>
-                            <div className="w-20 h-1.5 bg-white/10 rounded-full mt-1">
+                            <div className="font-semibold text-sm tnum text-purple-400">{fmtCurrency(row.total)}</div>
+                            <div className="w-20 h-2 bg-white/10 rounded-full mt-2">
                               <div 
-                                className="h-1.5 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full transition-all duration-500" 
+                                className="h-2 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full transition-all duration-500" 
                                 style={{ width: `${pct}%` }}
                               ></div>
                             </div>
@@ -413,341 +514,168 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
-          </div>
-          <div className="mb-4">
-          <div className="grid md:grid-cols-2 gap-6">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h2 className="font-semibold heading">Orçamentos ({month})</h2>
-                <MonthSelector size="sm" showCurrentButton={false} />
-              </div>
-              <div className="overflow-auto card">
-                <table className="min-w-[520px] w-full text-sm">
-                  <thead>
-                    <tr className="text-left">
-                      <th className="p-2">Categoria</th>
-                      <th className="p-2">Orçado</th>
-                      <th className="p-2">Gasto</th>
-                      <th className="p-2">%</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {summary.budgets && summary.budgets.length > 0 ? (
-                      summary.budgets.map((b: any) => {
-                        const spent = Number(b.spent || 0);
-                        const budget = Number(b.budget || 0);
-                        const percentage = budget > 0 ? Math.round((spent / budget) * 100) : 0;
-                        const isOverBudget = percentage > 100;
-                        
-                        return (
-                          <tr key={b.category_id} className="border-t border-white/5">
-                            <td className="p-2">{b.category}</td>
-                            <td className="p-2 tnum">{fmtCurrency(budget)}</td>
-                            <td className="p-2 tnum">{fmtCurrency(spent)}</td>
-                            <td className={`p-2 tnum ${isOverBudget ? 'text-[color:var(--neg)]' : ''}`}>
-                              {percentage}%
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      budgets.map((b) => (
-                        <tr key={b.id} className="border-t border-white/5">
-                          <td className="p-2">{b.category}</td>
-                          <td className="p-2 tnum">{fmtCurrency(Number(b.amount||0))}</td>
-                          <td className="p-2 tnum">-</td>
-                          <td className="p-2 tnum">-</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-semibold heading flex items-center gap-2">
-                  <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                  </svg>
-                  Metas
-                </h2>
-                <div className="flex items-center gap-2">
-                  {goals.length > 0 && (
-                    <span className="text-xs text-[color:var(--text-dim)] bg-white/5 px-2 py-1 rounded">
-                      {goals.filter(g => {
-                        const prog = Math.min(100, Math.round(100*(Number(g.current_amount||0)/Number(g.target_amount||1))));
-                        return prog >= 100;
-                      }).length} de {goals.length} concluídas
-                    </span>
-                  )}
-                  <button 
-                    onClick={() => navigate('/goals')} 
-                    className="text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)] transition-colors flex items-center gap-1"
-                  >
-                    Ver todas
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
+          </ModernCard>
+          {/* Card: Orçamentos */}
+          <ModernCard className="p-6 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-blue-500/20 border border-blue-500/30">
+                  <TargetIcon className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Orçamentos ({month})</h3>
+                  <p className="text-white/70 text-sm">Controle de gastos por categoria</p>
                 </div>
               </div>
-              <div className="space-y-3">
-                {goals.length === 0 ? (
-                  <div className="card p-6 text-center text-[color:var(--text-dim)] border-2 border-dashed border-white/10">
-                    <div className="mb-3">
-                      <svg className="w-12 h-12 mx-auto text-[color:var(--text-dim)] opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-                      </svg>
-                    </div>
-                    <div className="text-sm mb-2">Nenhuma meta cadastrada</div>
-                    <p className="text-xs text-[color:var(--text-dim)] mb-4">Defina objetivos financeiros e acompanhe seu progresso</p>
-                    <button 
-                      onClick={() => navigate('/goals')} 
-                      className="text-sm bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 px-4 py-2 rounded-lg transition-colors"
-                    >
-                      Criar primeira meta
-                    </button>
-                  </div>
-                ) : (
-                  goals.slice(0, 3).map((g) => {
-                    const prog = Math.min(100, Math.round(100*(Number(g.current_amount||0)/Number(g.target_amount||1))));
-                    const isDebtGoal = g.type === 'quitar_divida';
-                    const remaining = Number(g.target_amount||0) - Number(g.current_amount||0);
-                    const isCompleted = prog >= 100;
-                    
-                    // Calcular status baseado no prazo
-                    let statusColor = 'text-[color:var(--text-dim)]';
-                    let statusText = 'No prazo';
-                    let statusIcon = '⏱️';
-                    
-                    if (g.target_date) {
-                      const today = new Date();
-                      const targetDate = new Date(g.target_date);
-                      const daysLeft = Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-                      
-                      if (isCompleted) {
-                        statusColor = 'text-green-400';
-                        statusText = 'Concluída';
-                        statusIcon = '✅';
-                      } else if (daysLeft < 0) {
-                        statusColor = 'text-red-400';
-                        statusText = 'Atrasada';
-                        statusIcon = '⚠️';
-                      } else if (daysLeft <= 30) {
-                        statusColor = 'text-yellow-400';
-                        statusText = `${daysLeft}d restantes`;
-                        statusIcon = '⏰';
-                      } else {
-                        statusText = `${Math.ceil(daysLeft/30)}m restantes`;
-                        statusIcon = '📅';
-                      }
-                    }
-                    
-                    // Formatação da data limite
-                    const targetDateFormatted = g.target_date ? new Date(g.target_date).toLocaleDateString('pt-BR', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric'
-                    }) : null;
-                    
-                    // Calcular sugestão de aporte mensal se houver data limite
-                    let suggestedMonthly = null;
-                    if (g.target_date && !isCompleted) {
-                      const today = new Date();
-                      const targetDate = new Date(g.target_date);
-                      const monthsLeft = Math.max(1, Math.ceil((targetDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24 * 30)));
-                      suggestedMonthly = remaining / monthsLeft;
-                    }
-                    
-                    return (
-                      <div key={g.id} className="card p-4 hover:bg-white/[0.02] transition-all duration-200 border border-white/5 hover:border-white/10 group">
-                        {/* Header com nome, tipo e prioridade */}
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`inline-block w-3 h-3 rounded-full flex-shrink-0 ${
-                              isDebtGoal ? 'bg-pink-400' : 'bg-cyan-400'
-                            }`} />
-                            <div className="min-w-0">
-                              <span className="font-medium text-sm truncate block group-hover:text-[color:var(--text-bright)] transition-colors">{g.name}</span>
-                              <div className="flex items-center gap-1 mt-1 flex-wrap">
-                                <span className="text-[10px] text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded">
-                                  {isDebtGoal ? '💳 Dívida' : '💰 Poupança'}
-                                </span>
-                                {g.strategy && (
-                                  <span className="text-[10px] text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded">
-                                    {g.strategy === 'linear' ? '📈 Linear' : '🎯 Alocação'}
-                                  </span>
-                                )}
-                                {g.priority === 'alta' && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 flex-shrink-0">🔴 Alta</span>
-                                )}
-                                {g.priority === 'baixa' && (
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 flex-shrink-0">🟢 Baixa</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                          <div className="text-right flex-shrink-0">
-                            <div className={`text-lg font-bold ${
-                              isCompleted ? 'text-green-400' : prog >= 75 ? 'text-cyan-400' : prog >= 50 ? 'text-yellow-400' : 'text-orange-400'
-                            }`}>{prog}%</div>
-                            <div className={`text-[10px] ${statusColor} flex items-center gap-1`}>
-                              <span>{statusIcon}</span>
-                              <span>{statusText}</span>
-                            </div>
-                          </div>
-                        </div>
-                        
-                        {/* Valores e progresso */}
-                        <div className="space-y-2 mb-3">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-[color:var(--text-dim)]">Atual:</span>
-                            <span className="font-medium">{fmtCurrency(Number(g.current_amount||0))}</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-[color:var(--text-dim)]">Meta:</span>
-                            <span className="font-medium">{fmtCurrency(Number(g.target_amount||0))}</span>
-                          </div>
-                          {!isCompleted && remaining > 0 && (
-                            <div className="flex justify-between text-xs">
-                              <span className="text-[color:var(--text-dim)]">Restante:</span>
-                              <span className="font-medium text-orange-400">{fmtCurrency(Number(remaining||0))}</span>
-                            </div>
-                          )}
-                          {suggestedMonthly && suggestedMonthly > 0 && (
-                             <div className="flex justify-between text-xs">
-                               <span className="text-[color:var(--text-dim)]">Sugerido/mês:</span>
-                               <span className="font-medium text-blue-400">{fmtCurrency(Number(suggestedMonthly||0))}</span>
-                             </div>
-                           )}
-                        </div>
-                        
-                        {/* Barra de progresso */}
-                        <div className="h-2.5 rounded-full bg-white/5 overflow-hidden mb-3 relative">
-                          <div 
-                            className={`h-2.5 rounded-full transition-all duration-500 ${
-                              isCompleted 
-                                ? 'bg-gradient-to-r from-green-500 to-emerald-400' 
-                                : isDebtGoal 
-                                  ? 'bg-gradient-to-r from-pink-500 to-rose-400' 
-                                  : 'bg-gradient-to-r from-cyan-500 to-blue-400'
-                            }`}
-                            style={{ width: `${prog}%` }}
-                          />
-                          {/* Indicador de meta planejada */}
-                          {g.planned_monthly_amount && g.target_date && !isCompleted && (
-                            <div 
-                              className="absolute top-0 w-0.5 h-2.5 bg-white/60"
-                              style={{ 
-                                left: `${Math.min(100, (Number(g.current_amount||0) + Number(g.planned_monthly_amount)) / Number(g.target_amount||1) * 100)}%` 
-                              }}
-                              title="Meta do próximo mês"
-                            />
-                          )}
-                        </div>
-                        
-                        {/* Footer com informações adicionais */}
-                        <div className="flex items-center justify-between text-[10px] text-[color:var(--text-dim)]">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {targetDateFormatted && (
-                              <span className="flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded">
-                                <span>📅</span>
-                                <span>{targetDateFormatted}</span>
-                              </span>
-                            )}
-                            {g.planned_monthly_amount && (
-                              <span className="flex items-center gap-1 bg-white/5 px-1.5 py-0.5 rounded">
-                                <span>💰</span>
-                                <span>{fmtCurrency(Number(g.planned_monthly_amount||0))}/mês</span>
-                              </span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {g.account_id && (
-                              <span className="text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded" title="Conta vinculada">
-                                📊
-                              </span>
-                            )}
-                            {g.category_id && (
-                              <span className="text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded" title="Categoria vinculada">
-                                🏷️
-                              </span>
-                            )}
-                            {g.recurring_day && (
-                              <span className="text-[color:var(--text-dim)] bg-white/5 px-1.5 py-0.5 rounded" title={`Recorrência: dia ${g.recurring_day}`}>
-                                🔄
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* Botões de ação */}
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5">
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(`/goals?contribute=${g.id}`);
-                            }}
-                            className="flex-1 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 hover:text-cyan-300 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 flex items-center justify-center gap-2"
-                            title="Fazer aporte nesta meta"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                            </svg>
-                            Aportar
-                          </button>
-                          <button 
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate('/goals');
-                            }}
-                            className="bg-white/5 hover:bg-white/10 text-[color:var(--text-dim)] hover:text-[color:var(--text)] px-3 py-2 rounded-lg text-xs transition-all duration-200 flex items-center justify-center"
-                            title="Ver detalhes da meta"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-                
-                {goals.length > 3 && (
-                  <div className="text-center pt-2">
-                    <button 
-                      onClick={() => navigate('/goals')} 
-                      className="text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)] transition-colors bg-white/5 hover:bg-white/10 px-3 py-2 rounded-lg flex items-center gap-2 mx-auto"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      Ver mais {goals.length - 3} metas
-                    </button>
-                  </div>
-                )}
-              </div>
+              <ModernButton
+                variant="primary"
+                size="sm"
+                onClick={() => navigate('/budgets')}
+                className="flex items-center gap-2"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Gerenciar
+              </ModernButton>
             </div>
-          </div>
-          </div>
+            
+            <div className="overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-white/10">
+                    <th className="p-3 text-white/70 font-medium">Categoria</th>
+                    <th className="p-3 text-white/70 font-medium">Orçado</th>
+                    <th className="p-3 text-white/70 font-medium">Gasto</th>
+                    <th className="p-3 text-white/70 font-medium">%</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {summary.budgets && summary.budgets.length > 0 ? (
+                    summary.budgets.map((b: any) => {
+                      const spent = Number(b.spent || 0);
+                      const budget = Number(b.budget || 0);
+                      const percentage = budget > 0 ? Math.round((spent / budget) * 100) : 0;
+                      const isOverBudget = percentage > 100;
+                      
+                      return (
+                        <tr key={b.category_id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                          <td className="p-3 text-white font-medium">{b.category}</td>
+                          <td className="p-3 font-mono text-white">{fmtCurrency(budget)}</td>
+                          <td className="p-3 font-mono text-white">{fmtCurrency(spent)}</td>
+                          <td className={`p-3 font-mono font-semibold ${isOverBudget ? 'text-red-400' : 'text-green-400'}`}>
+                            {percentage}%
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    budgets.map((b) => (
+                      <tr key={b.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                        <td className="p-3 text-white font-medium">{b.category}</td>
+                        <td className="p-3 font-mono text-white">{fmtCurrency(Number(b.amount||0))}</td>
+                        <td className="p-3 font-mono text-white/70">-</td>
+                        <td className="p-3 font-mono text-white/70">-</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </ModernCard>
+          
+          {/* Card: Metas Financeiras */}
+          <ModernCard className="p-6 mb-8">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center gap-3">
+                <div className="p-3 rounded-xl bg-green-500/20 border border-green-500/30">
+                  <TargetIcon className="w-6 h-6 text-green-400" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Metas Financeiras</h3>
+                  <p className="text-white/70 text-sm">Acompanhe seus objetivos</p>
+                </div>
+              </div>
+              <ModernButton
+                variant="primary"
+                size="sm"
+                onClick={() => navigate('/goals')}
+                className="flex items-center gap-2"
+              >
+                <PlusIcon className="w-4 h-4" />
+                Gerenciar
+              </ModernButton>
+            </div>
+            
+            <div className="space-y-4">
+              {goals.length === 0 ? (
+                <div className="text-center py-8">
+                  <TargetIcon className="w-12 h-12 text-white/30 mx-auto mb-3" />
+                  <p className="text-white/70 mb-4">Nenhuma meta cadastrada</p>
+                  <ModernButton
+                    variant="primary"
+                    size="sm"
+                    onClick={() => navigate('/goals')}
+                    className="flex items-center gap-2"
+                  >
+                    <PlusIcon className="w-4 h-4" />
+                    Criar primeira meta
+                  </ModernButton>
+                </div>
+              ) : (
+                goals.slice(0, 3).map((goal) => {
+                  const progress = goal.target_amount > 0 ? (goal.current_amount / goal.target_amount) * 100 : 0;
+                  const isCompleted = progress >= 100;
+                  
+                  return (
+                    <div key={goal.id} className="p-4 rounded-xl bg-white/5 border border-white/10 hover:border-white/20 transition-all duration-200 backdrop-blur-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <span className="font-medium text-white">{goal.name}</span>
+                        <span className={`text-xs px-3 py-1 rounded-full font-medium ${
+                          isCompleted 
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
+                            : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        }`}>
+                          {isCompleted ? '✅ Concluída' : '🎯 Em andamento'}
+                        </span>
+                      </div>
+                      <div className="text-sm text-white/70 mb-3">
+                        {fmtCurrency(goal.current_amount)} de {fmtCurrency(goal.target_amount)}
+                      </div>
+                      <div className="w-full bg-white/10 rounded-full h-2 mb-2">
+                        <div 
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            isCompleted 
+                              ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                              : 'bg-gradient-to-r from-blue-500 to-cyan-500'
+                          }`}
+                          style={{ width: `${Math.min(progress, 100)}%` }}
+                        ></div>
+                      </div>
+                      <div className="text-sm font-semibold text-white text-right">
+                        {Math.round(progress)}%
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              {goals.length > 3 && (
+                <ModernButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => navigate('/goals')}
+                  className="w-full flex items-center justify-center gap-2"
+                >
+                  <EyeIcon className="w-4 h-4" />
+                  Ver mais {goals.length - 3} metas
+                </ModernButton>
+              )}
+            </div>
+          </ModernCard>
         </>
       ) : (
-        <div>Sem dados.</div>
+        <ModernCard className="p-8 text-center">
+          <div className="text-white/70">Sem dados disponíveis.</div>
+        </ModernCard>
       )}
-    </div>
-  );
-}
-
-function Card({ title, value, pos, neg }: { title: string; value: string; pos?: boolean; neg?: boolean }) {
-  return (
-    <div className="card p-4">
-      <div className="text-sm text-[color:var(--text-dim)]">{title}</div>
-      <div className="text-2xl font-semibold tnum mt-1" style={{ textShadow: '0 0 16px rgba(34,211,238,.08)' }}>
-        <span className={pos ? 'text-[color:var(--pos)]' : neg ? 'text-[color:var(--neg)]' : ''}>{value}</span>
-      </div>
-    </div>
+    </ModernLayout>
   );
 }

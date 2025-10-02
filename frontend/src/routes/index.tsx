@@ -53,8 +53,8 @@ export default function AppRoutes() {
           <Route path="reports" element={<Reports />} />
           <Route path="import" element={<ImportWizard />} />
           <Route path="profile" element={<Profile />} />
-          <Route path="fixed" element={<FixedExpenses />} />
-          <Route path="fixed-dashboard" element={<FixedDashboard />} />
+          <Route path="gastos-fixos" element={<FixedExpenses />} />
+          <Route path="dashboard-gastos-fixos" element={<FixedDashboard />} />
           <Route path="debug" element={<Debug />} />
         </Route>
       </Routes>

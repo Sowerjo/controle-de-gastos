@@ -86,10 +86,11 @@ function AppBar({ onLogout }: { onLogout: () => void }) {
   }, []);
   
   return (
-    <header className="sticky top-0 z-30 surface-2 backdrop-blur-lg border-b border-white/5 h-14 flex items-center justify-between px-4 shadow-md">
+    <header className="sticky top-0 z-30 backdrop-blur-xl bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 border-b border-white/10 h-14 flex items-center justify-between px-4 shadow-2xl relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-blue-600/10 via-transparent to-emerald-600/10" />
       <div className="flex items-center gap-3">
         <div className="hidden md:block text-sm text-[color:var(--text-dim)]">Período</div>
-        <button className="text-sm rounded-full border border-white/10 px-3 py-1 bg-[color:var(--surf-1)] hover:border-white/20 hover:bg-[color:var(--surf-2)] transition-colors">
+        <button className="text-sm rounded-full border border-white/20 px-3 py-1 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 transition-colors">
           {currentDate}
         </button>
       </div>
@@ -102,13 +103,13 @@ function AppBar({ onLogout }: { onLogout: () => void }) {
           </div>
           <input
             placeholder="Pesquisar (/ para focar)"
-            className="w-full input pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-cyan-400/30 transition-all"
+            className="w-full pl-10 pr-3 py-2 text-sm bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all backdrop-blur-sm"
           />
         </div>
       </div>
       <div className="flex items-center gap-2">
         <ThemeSwitcher />
-        <Link to="/fixed" className="text-sm rounded-full border border-white/10 px-3 py-1 bg-[color:var(--surf-1)] hover:border-white/20 hover:bg-[color:var(--surf-2)] transition-colors flex items-center gap-1">
+        <Link to="/gastos-fixos" className="text-sm rounded-full border border-white/20 px-3 py-1 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 transition-colors flex items-center gap-1">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
             <path d="M8 0a5 5 0 0 0-5 5v1H2a2 2 0 0 0-2 2v5a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a2 2 0 0 0-2-2h-1V5A5 5 0 0 0 8 0zm-3 5a3 3 0 1 1 6 0v1H5V5z"/>
           </svg>
@@ -129,7 +130,7 @@ function AppBar({ onLogout }: { onLogout: () => void }) {
           Nova transação
         </button>
         <button
-          className="text-sm rounded-full border border-white/10 px-3 py-1 bg-[color:var(--surf-1)] hover:border-white/20 hover:bg-[color:var(--surf-2)] transition-colors flex items-center gap-1"
+          className="text-sm rounded-full border border-white/20 px-3 py-1 bg-white/10 text-white hover:border-white/30 hover:bg-white/15 transition-colors flex items-center gap-1"
           onClick={onLogout}
         >
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
@@ -169,13 +170,16 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', onKey);
   }, [navigate]);
   return (
-    <div className="min-h-screen grid md:grid-cols-[240px_1fr] bg-[color:var(--bg)] text-[color:var(--text)]">
-      <aside className="hidden md:flex flex-col gap-2 p-4 surface-2 backdrop-blur-lg border-r border-white/5 shadow-lg">
+    <div className="min-h-screen grid md:grid-cols-[240px_1fr] bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 text-[color:var(--text)] relative overflow-hidden">
+      {/* Cobertura da junção entre colunas para evitar linha preta/branca ao alternar tema */}
+      <div className="hidden md:block absolute left-[240px] top-0 h-full w-[2px] bg-gradient-to-b from-cyan-400/30 via-fuchsia-400/30 to-transparent pointer-events-none z-30" />
+      <aside className="hidden md:flex flex-col gap-2 p-4 backdrop-blur-xl bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-tr from-blue-600/10 via-transparent to-emerald-600/10" />
         <div className="px-2 py-3 heading text-lg flex items-center gap-2">
           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
             <path d="M12.136.326A1.5 1.5 0 0 1 14 1.78V3h.5A1.5 1.5 0 0 1 16 4.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 0 13.5v-9a1.5 1.5 0 0 1 1.432-1.499L12.136.326zM5.562 3H13V1.78a.5.5 0 0 0-.621-.484L5.562 3zM1.5 4a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-13z"/>
           </svg>
-          <span>Finanças</span>
+          <span className="bg-clip-text text-transparent bg-gradient-to-r from-cyan-300 to-fuchsia-300">Finanças</span>
         </div>
         <NavLink to="/" active={pathname === '/'}>
           <span className="flex items-center gap-2">
@@ -183,7 +187,7 @@ export default function Layout() {
             <span>Dashboard</span>
           </span>
         </NavLink>
-        <NavLink to="/fixed-dashboard" active={pathname.startsWith('/fixed-dashboard')}>
+        <NavLink to="/dashboard-gastos-fixos" active={pathname.startsWith('/dashboard-gastos-fixos')}>
           <span className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
               <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
@@ -191,7 +195,7 @@ export default function Layout() {
             <span>Dashboard Gastos Fixos</span>
           </span>
         </NavLink>
-        <NavLink to="/fixed" active={pathname === '/fixed'}>
+        <NavLink to="/gastos-fixos" active={pathname === '/gastos-fixos'}>
           <span className="flex items-center gap-2">
             {Icons.fixed}
             <span>Gastos Fixos</span>
@@ -255,7 +259,7 @@ export default function Layout() {
           </span>
         </NavLink>
       </aside>
-      <div className="flex flex-col min-h-screen">
+      <div className="relative flex flex-col min-h-screen">
         <AppBar onLogout={doLogout} />
         <main className="p-4">
           <Outlet />
@@ -326,7 +330,7 @@ export default function Layout() {
                   <span>Início</span>
                 </span>
               </SheetLink>
-              <SheetLink to="/fixed-dashboard" active={pathname.startsWith('/fixed-dashboard')} onClick={() => setMobileMenuOpen(false)}>
+              <SheetLink to="/dashboard-gastos-fixos" active={pathname.startsWith('/dashboard-gastos-fixos')} onClick={() => setMobileMenuOpen(false)}>
                 <span className="flex flex-col items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                     <path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h3A1.5 1.5 0 0 1 7 2.5v3A1.5 1.5 0 0 1 5.5 7h-3A1.5 1.5 0 0 1 1 5.5v-3zM2.5 2a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 1h3A1.5 1.5 0 0 1 15 2.5v3A1.5 1.5 0 0 1 13.5 7h-3A1.5 1.5 0 0 1 9 5.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zM1 10.5A1.5 1.5 0 0 1 2.5 9h3A1.5 1.5 0 0 1 7 10.5v3A1.5 1.5 0 0 1 5.5 15h-3A1.5 1.5 0 0 1 1 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3zm6.5.5A1.5 1.5 0 0 1 10.5 9h3a1.5 1.5 0 0 1 1.5 1.5v3a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 9 13.5v-3zm1.5-.5a.5.5 0 0 0-.5.5v3a.5.5 0 0 0 .5.5h3a.5.5 0 0 0 .5-.5v-3a.5.5 0 0 0-.5-.5h-3z"/>
@@ -370,7 +374,7 @@ export default function Layout() {
                   <span>Relatórios</span>
                 </span>
               </SheetLink>
-              <SheetLink to="/fixed" active={pathname === '/fixed'} onClick={() => setMobileMenuOpen(false)}>
+              <SheetLink to="/gastos-fixos" active={pathname === '/gastos-fixos'} onClick={() => setMobileMenuOpen(false)}>
                 <span className="flex flex-col items-center gap-2">
                   {Icons.fixed}
                   <span>Gastos Fixos</span>
@@ -421,7 +425,8 @@ function NavLink({ to, children, active }: { to: string; children: React.ReactNo
   return (
     <Link
       to={to}
-  className={`px-3 py-2 rounded-[12px] border ${active ? 'border-cyan-300/20 bg-gradient-to-tr from-cyan-400 to-fuchsia-400 text-[#0b0f1a] shadow-glow' : 'border-white/5 bg-[color:var(--surf-1)] text-[color:var(--text)] hover:border-white/10'}`}
+      aria-current={active ? 'page' : undefined}
+      className={`group px-3 py-2 rounded-[12px] border transition-all duration-200 ${active ? 'border-cyan-300/30 bg-gradient-to-tr from-cyan-400 to-fuchsia-400 text-[#0b0f1a] shadow-glow' : 'border-white/20 bg-white/10 text-white hover:border-white/30 hover:bg-white/15'}`}
     >
       {children}
     </Link>
@@ -432,7 +437,7 @@ function A({ href, active, children }: { href: string; active?: boolean; childre
   return (
     <Link
       to={href}
-      className={`px-3 py-2 rounded-[12px] ${active ? 'bg-gradient-to-tr from-cyan-400 to-fuchsia-400 text-[#0b0f1a]' : 'text-[color:var(--text)] border border-white/5 bg-[color:var(--surf-1)] hover:border-white/20 transition-colors'}`}
+      className={`px-3 py-2 rounded-[12px] transition-all duration-200 ${active ? 'bg-gradient-to-tr from-cyan-400 to-fuchsia-400 text-[#0b0f1a] shadow-glow' : 'text-[color:var(--text)] border border-white/10 bg-[color:var(--surf-1)] hover:border-white/20 hover:bg-[color:var(--surf-2)]'}`}
     >
       {children}
     </Link>

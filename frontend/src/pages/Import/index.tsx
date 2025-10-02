@@ -1,6 +1,50 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../../services/api';
+import ModernLayout, { ModernCard, ModernButton } from '../../components/Layout/ModernLayout';
+// Custom SVG Icons
+const Icons = {
+  upload: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5z"/>
+      <path d="M7.646 1.146a.5.5 0 0 1 .708 0l3 3a.5.5 0 0 1-.708.708L8.5 2.707V11.5a.5.5 0 0 1-1 0V2.707L5.354 4.854a.5.5 0 1 1-.708-.708l3-3z"/>
+    </svg>
+  ),
+  settings: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M8 4.754a3.246 3.246 0 1 0 0 6.492 3.246 3.246 0 0 0 0-6.492zM5.754 8a2.246 2.246 0 1 1 4.492 0 2.246 2.246 0 0 1-4.492 0z"/>
+      <path d="M9.796 1.343c-.527-1.79-3.065-1.79-3.592 0l-.094.319a.873.873 0 0 1-1.255.52l-.292-.16c-1.64-.892-3.433.902-2.54 2.541l.159.292a.873.873 0 0 1-.52 1.255l-.319.094c-1.79.527-1.79 3.065 0 3.592l.319.094a.873.873 0 0 1 .52 1.255l-.16.292c-.892 1.64.901 3.434 2.541 2.54l.292-.159a.873.873 0 0 1 1.255.52l.094.319c.527 1.79 3.065 1.79 3.592 0l.094-.319a.873.873 0 0 1 1.255-.52l.292.16c1.64.893 3.434-.902 2.54-2.541l-.159-.292a.873.873 0 0 1 .52-1.255l.319-.094c1.79-.527 1.79-3.065 0-3.592l-.319-.094a.873.873 0 0 1-.52-1.255l.16-.292c.893-1.64-.902-3.433-2.541-2.54l-.292.159a.873.873 0 0 1-1.255-.52l-.094-.319zm-2.633.283c.246-.835 1.428-.835 1.674 0l.094.319a1.873 1.873 0 0 0 2.693 1.115l.291-.16c.764-.415 1.6.42 1.184 1.185l-.159.292a1.873 1.873 0 0 0 1.116 2.692l.318.094c.835.246.835 1.428 0 1.674l-.319.094a1.873 1.873 0 0 0-1.115 2.693l.16.291c.415.764-.42 1.6-1.185 1.184l-.291-.159a1.873 1.873 0 0 0-2.693 1.116l-.094.318c-.246.835-1.428.835-1.674 0l-.094-.319a1.873 1.873 0 0 0-2.692-1.115l-.292.16c-.764.415-1.6-.42-1.184-1.185l.159-.291A1.873 1.873 0 0 0 1.945 8.93l-.319-.094c-.835-.246-.835-1.428 0-1.674l.319-.094A1.873 1.873 0 0 0 3.06 4.377l-.16-.292c-.415-.764.42-1.6 1.185-1.184l.292.159a1.873 1.873 0 0 0 2.692-1.115l.094-.319z"/>
+    </svg>
+  ),
+  eye: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M16 8s-3-5.5-8-5.5S0 8 0 8s3 5.5 8 5.5S16 8 16 8zM1.173 8a13.133 13.133 0 0 1 1.66-2.043C4.12 4.668 5.88 3.5 8 3.5c2.12 0 3.879 1.168 5.168 2.457A13.133 13.133 0 0 1 14.828 8c-.058.087-.122.183-.195.288-.335.48-.83 1.12-1.465 1.755C11.879 11.332 10.119 12.5 8 12.5c-2.12 0-3.879-1.168-5.168-2.457A13.134 13.134 0 0 1 1.172 8z"/>
+      <path d="M8 5.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5zM4.5 8a3.5 3.5 0 1 1 7 0 3.5 3.5 0 0 1-7 0z"/>
+    </svg>
+  ),
+  check: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M2.5 8a5.5 5.5 0 0 1 8.25-4.764.5.5 0 0 0 .5-.866A6.5 6.5 0 1 0 14.5 8a.5.5 0 0 0-1 0 5.5 5.5 0 1 1-11 0z"/>
+      <path d="M15.354 3.354a.5.5 0 0 0-.708-.708L8 9.293 5.354 6.646a.5.5 0 1 0-.708.708l3 3a.5.5 0 0 0 .708 0l7-7z"/>
+    </svg>
+  ),
+  arrowLeft: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path fillRule="evenodd" d="M15 8a.5.5 0 0 0-.5-.5H2.707l3.147-3.146a.5.5 0 1 0-.708-.708l-4 4a.5.5 0 0 0 0 .708l4 4a.5.5 0 0 0 .708-.708L2.707 8.5H14.5A.5.5 0 0 0 15 8z"/>
+    </svg>
+  ),
+  arrowRight: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path fillRule="evenodd" d="M1 8a.5.5 0 0 1 .5-.5h11.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L13.293 8.5H1.5A.5.5 0 0 1 1 8z"/>
+    </svg>
+  ),
+  document: (
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+      <path d="M5 4a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1H5zm-.5 2.5A.5.5 0 0 1 5 6h6a.5.5 0 0 1 0 1H5a.5.5 0 0 1-.5-.5zM5 8a.5.5 0 0 0 0 1h6a.5.5 0 0 0 0-1H5zm0 2a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1H5z"/>
+      <path d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm10-1H4a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1z"/>
+    </svg>
+  )
+};
 
 export default function ImportWizard(){
   const navigate = useNavigate();
@@ -274,109 +318,322 @@ export default function ImportWizard(){
   };
 
   return (
-    <div className="p-4">
-      <h1 className="heading text-2xl mb-4">Importação de CSV</h1>
-      {step===1 && (
-        <div className="card p-4 space-y-3">
-          <input type="file" accept=".csv" onChange={(e)=> setFile(e.target.files?.[0] || null)} />
-          <button className="btn-primary text-sm" disabled={!file} onClick={()=> file && parseCSV(file)}>Próximo: Mapear colunas</button>
+    <ModernLayout title="Importação de CSV">
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          <div className="text-blue-500">{Icons.upload}</div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+            Importação de CSV
+          </h1>
         </div>
-      )}
+
+        {step===1 && (
+          <ModernCard>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-blue-500">{Icons.document}</div>
+              <h2 className="text-xl font-semibold">Selecionar Arquivo</h2>
+            </div>
+            
+            <div className="space-y-6">
+              <div className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
+                <div className="text-gray-400 mx-auto mb-4">{Icons.upload}</div>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">
+                  Selecione um arquivo CSV para importar suas transações
+                </p>
+                <input 
+                  type="file" 
+                  accept=".csv" 
+                  onChange={(e)=> setFile(e.target.files?.[0] || null)}
+                  className="block w-full text-sm text-gray-500 dark:text-gray-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-lg file:border-0
+                    file:text-sm file:font-medium
+                    file:bg-blue-50 file:text-blue-700
+                    dark:file:bg-blue-900/20 dark:file:text-blue-400
+                    hover:file:bg-blue-100 dark:hover:file:bg-blue-900/30
+                    file:cursor-pointer cursor-pointer"
+                />
+                {file && (
+                  <p className="mt-2 text-sm text-green-600 dark:text-green-400">
+                    Arquivo selecionado: {file.name}
+                  </p>
+                )}
+              </div>
+              
+              <div className="flex justify-end">
+                <ModernButton
+                  variant="primary"
+                  disabled={!file}
+                  onClick={()=> file && parseCSV(file)}
+                  className="flex items-center gap-2"
+                >
+                  Próximo: Mapear colunas
+                  {Icons.arrowRight}
+                </ModernButton>
+              </div>
+            </div>
+          </ModernCard>
+        )}
       {step===2 && (
-        <div className="space-y-4">
-          <div className="card p-4">
-            <h2 className="font-semibold mb-2">Mapeamento</h2>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-[color:var(--text-dim)]">Delimitador:</span>
-              <select className="input px-2 py-1" value={delimiterChoice} onChange={(e)=> setDelimiterChoice(e.target.value as any)}>
-                <option value="auto">Auto (detectado: {detectedDelim})</option>
-                <option value="comma">Vírgula (,)</option>
-                <option value="semicolon">Ponto e vírgula (;)</option>
-              </select>
+        <div className="space-y-6">
+          <ModernCard>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-blue-500">{Icons.settings}</div>
+              <h2 className="text-xl font-semibold">Configurações de Importação</h2>
             </div>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-[color:var(--text-dim)]">Formato de data:</span>
-              <select className="input px-2 py-1" value={dateFormat} onChange={(e)=> setDateFormat(e.target.value as any)}>
-                <option value="Y-M-D">AAAA-MM-DD</option>
-                <option value="D-M-Y">DD/MM/AAAA</option>
-                <option value="M-D-Y">MM/DD/AAAA</option>
-              </select>
-              <span className="text-[color:var(--text-dim)] ml-4">Formato de valor:</span>
-              <select className="input px-2 py-1" value={amountFormat} onChange={(e)=> setAmountFormat(e.target.value as any)}>
-                <option value="auto">Auto</option>
-                <option value="comma">1.234,56</option>
-                <option value="dot">1,234.56</option>
-              </select>
-              <span className="text-[color:var(--text-dim)] ml-4">Tipo (quando CSV não traz coluna):</span>
-              <select className="input px-2 py-1" value={typeRule} onChange={(e)=> setTypeRule(e.target.value as any)}>
-                <option value="bySign">Derivar pelo sinal do valor</option>
-                <option value="income">Forçar RECEITA</option>
-                <option value="expense">Forçar DESPESA</option>
-              </select>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Delimitador
+                </label>
+                <select 
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                  value={delimiterChoice} 
+                  onChange={(e)=> setDelimiterChoice(e.target.value as any)}
+                >
+                  <option value="auto">Auto (detectado: {detectedDelim})</option>
+                  <option value="comma">Vírgula (,)</option>
+                  <option value="semicolon">Ponto e vírgula (;)</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Formato de data
+                </label>
+                <select 
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                  value={dateFormat} 
+                  onChange={(e)=> setDateFormat(e.target.value as any)}
+                >
+                  <option value="Y-M-D">AAAA-MM-DD</option>
+                  <option value="D-M-Y">DD/MM/AAAA</option>
+                  <option value="M-D-Y">MM/DD/AAAA</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Formato de valor
+                </label>
+                <select 
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                  value={amountFormat} 
+                  onChange={(e)=> setAmountFormat(e.target.value as any)}
+                >
+                  <option value="auto">Auto</option>
+                  <option value="comma">1.234,56</option>
+                  <option value="dot">1,234.56</option>
+                </select>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Tipo padrão
+                </label>
+                <select 
+                  className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                  value={typeRule} 
+                  onChange={(e)=> setTypeRule(e.target.value as any)}
+                >
+                  <option value="bySign">Derivar pelo sinal do valor</option>
+                  <option value="income">Forçar RECEITA</option>
+                  <option value="expense">Forçar DESPESA</option>
+                </select>
+              </div>
             </div>
-            <div className="grid sm:grid-cols-2 gap-2">
-              {['date','description','type','amount','account_id','to_account_id','category_id','payee_id','status'].map((k)=> (
-                <label key={k} className="text-sm">{k}
-                  <select className="input px-2 py-1 ml-2" value={map[k]||''} onChange={(e)=> setMap({...map, [k]: e.target.value})}>
-                    <option value="">--</option>
+            <div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">
+                Mapeamento de Colunas
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {['date','description','type','amount','account_id','to_account_id','category_id','payee_id','status'].map((k)=> (
+                  <div key={k}>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 capitalize">
+                      {k.replace('_', ' ')}
+                    </label>
+                    <select 
+                      className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                      value={map[k]||''} 
+                      onChange={(e)=> setMap({...map, [k]: e.target.value})}
+                    >
+                      <option value="">-- Selecionar --</option>
+                      {header.map((h,i)=> (<option key={i} value={h}>{h}</option>))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+              
+              <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Descrição Extra
+                    <span className="text-gray-500 text-xs ml-1">(opcional)</span>
+                  </label>
+                  <select 
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                    value={map['description_extra']||''} 
+                    onChange={(e)=> setMap({...map, description_extra: e.target.value})}
+                  >
+                    <option value="">-- Selecionar --</option>
                     {header.map((h,i)=> (<option key={i} value={h}>{h}</option>))}
                   </select>
-                </label>
-              ))}
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Será concatenado com a descrição principal
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                    Conta Padrão
+                  </label>
+                  <select 
+                    className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
+                    value={defaultAccountId} 
+                    onChange={(e)=> setDefaultAccountId(e.target.value? Number(e.target.value): '')}
+                  >
+                    <option value="">— Selecionar —</option>
+                    {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Usada quando account_id não existir ou estiver vazia
+                  </p>
+                </div>
+              </div>
+              
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Dica para transferências:</strong> Mapeie <strong>type</strong> para "transfer", 
+                  <strong> account_id</strong> com a conta de origem e <strong>to_account_id</strong> com a conta destino. 
+                  Elas serão criadas como duas transações pareadas.
+                </p>
+              </div>
             </div>
-            <div className="mt-2 text-sm">
-              <label>description_extra
-                <select className="input px-2 py-1 ml-2" value={map['description_extra']||''} onChange={(e)=> setMap({...map, description_extra: e.target.value})}>
-                  <option value="">--</option>
-                  {header.map((h,i)=> (<option key={i} value={h}>{h}</option>))}
-                </select>
-                <span className="text-[color:var(--text-dim)] ml-2">(opcional; concatena com descrição)</span>
-              </label>
+          </ModernCard>
+          <ModernCard>
+            <div className="flex items-center gap-3 mb-6">
+              <div className="text-blue-500">{Icons.eye}</div>
+              <h2 className="text-xl font-semibold">Prévia dos Dados</h2>
             </div>
-            <div className="mt-3 text-sm">
-              <label>Conta padrão (usada se a coluna account_id não existir ou estiver vazia):
-                <select className="input px-2 py-1 ml-2" value={defaultAccountId} onChange={(e)=> setDefaultAccountId(e.target.value? Number(e.target.value): '')}>
-                  <option value="">—</option>
-                  {accounts.map((a:any)=> (<option key={a.id} value={a.id}>{a.name}</option>))}
-                </select>
-              </label>
+            
+            <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-3 h-3 bg-amber-400 rounded"></span>
+                  Linhas destacadas em amarelo são possíveis duplicatas
+                </span>
+              </p>
             </div>
-            <div className="mt-2 text-xs text-[color:var(--text-dim)]">
-              Dica: para transferências, mapeie <b>type</b> para "transfer", <b>account_id</b> com a conta de origem (nome ou id) e <b>to_account_id</b> com a conta destino (nome). Elas serão criadas como duas transações pareadas.
-            </div>
-          </div>
-          <div className="card p-4">
-            <h2 className="font-semibold mb-2">Prévia (dedupe visual)</h2>
-            <div className="max-h-64 overflow-auto border border-white/5 rounded">
-              <table className="w-full text-xs">
-                <thead><tr>{header.map((h,i)=>(<th key={i} className="p-1 text-left">{h}</th>))}</tr></thead>
-                <tbody>
+            
+            <div className="max-h-96 overflow-auto border border-gray-200 dark:border-gray-700 rounded-lg">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 dark:bg-gray-800 sticky top-0">
+                  <tr>
+                    {header.map((h,i)=>(
+                      <th key={i} className="px-4 py-3 text-left font-medium text-gray-900 dark:text-gray-100 border-b border-gray-200 dark:border-gray-700">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                   {preview.map((row, idx) => (
-                    <tr key={idx} className={isDuplicate(preview, row, idx) ? 'bg-amber-500/10' : ''}>
-                      {row.map((c, j)=>(<td key={j} className="p-1">{c}</td>))}
+                    <tr 
+                      key={idx} 
+                      className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${
+                        isDuplicate(preview, row, idx) ? 'bg-amber-50 dark:bg-amber-900/20' : ''
+                      }`}
+                    >
+                      {row.map((c, j)=>(
+                        <td key={j} className="px-4 py-3 text-gray-900 dark:text-gray-100">
+                          {c}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          </div>
-          <div className="flex gap-2">
-            <button className="px-3 py-2 rounded border border-white/10" onClick={()=> setStep(1)}>Voltar</button>
-            <button className="btn-primary" onClick={upload}>Importar</button>
+          </ModernCard>
+          
+          <div className="flex justify-between">
+            <ModernButton
+              variant="secondary"
+              onClick={()=> setStep(1)}
+              className="flex items-center gap-2"
+            >
+              {Icons.arrowLeft}
+              Voltar
+            </ModernButton>
+            <ModernButton
+              variant="primary"
+              onClick={upload}
+              className="flex items-center gap-2"
+            >
+              Importar Dados
+              {Icons.upload}
+            </ModernButton>
           </div>
         </div>
       )}
       {step===3 && (
-        <div className="card p-4">
-          <h2 className="font-semibold mb-2">Resultado</h2>
-          <div className="text-sm mb-3">Inseridos: {result?.inserted??'-'} | Ignorados: {result?.skipped??'-'}</div>
-          <div className="flex gap-2">
-            <button className="btn-primary" onClick={()=> navigate(`/transactions?from=${encodeURIComponent(result?.from||'')}&to=${encodeURIComponent(result?.to||'')}${defaultAccountId?`&accountId=${defaultAccountId}`:''}`)}>Ver transações importadas</button>
-            <button className="px-3 py-2 rounded border border-white/10" onClick={()=> setStep(1)}>Nova importação</button>
+        <ModernCard>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="text-green-500">{Icons.check}</div>
+            <h2 className="text-xl font-semibold">Importação Concluída</h2>
           </div>
-        </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <div className="text-green-600 dark:text-green-400">{Icons.check}</div>
+                <span className="font-medium text-green-800 dark:text-green-200">Inseridos</span>
+              </div>
+              <p className="text-2xl font-bold text-green-900 dark:text-green-100 mt-1">
+                {result?.inserted ?? '-'}
+              </p>
+            </div>
+            
+            <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4">
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">!</span>
+                </span>
+                <span className="font-medium text-amber-800 dark:text-amber-200">Ignorados</span>
+              </div>
+              <p className="text-2xl font-bold text-amber-900 dark:text-amber-100 mt-1">
+                {result?.skipped ?? '-'}
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex flex-col sm:flex-row gap-3">
+            <ModernButton
+              variant="primary"
+              onClick={()=> navigate(`/transactions?from=${encodeURIComponent(result?.from||'')}&to=${encodeURIComponent(result?.to||'')}${defaultAccountId?`&accountId=${defaultAccountId}`:''}`)}
+            >
+              Ver Transações Importadas
+            </ModernButton>
+            <ModernButton
+              variant="secondary"
+              onClick={()=> setStep(1)}
+            >
+              Nova Importação
+            </ModernButton>
+            <ModernButton
+              variant="secondary"
+              onClick={()=> navigate('/dashboard')}
+              className="flex items-center gap-2"
+            >
+              Finalizar
+              {Icons.arrowRight}
+            </ModernButton>
+          </div>
+        </ModernCard>
       )}
-    </div>
+      </div>
+    </ModernLayout>
   );
 }
 

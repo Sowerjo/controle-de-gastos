@@ -4,6 +4,20 @@ import api from '../../services/api';
 import { fmtCurrency } from '../../utils/format';
 import { useMonth } from '../../contexts/MonthContext';
 import MonthSelector from '../../components/MonthSelector';
+import ModernLayout, { ModernCard, ModernButton } from '../../components/Layout/ModernLayout';
+import { 
+  CashIcon, 
+  CheckIcon, 
+  EditIcon, 
+  ClearIcon, 
+  PlusIcon, 
+  SearchIcon, 
+  FilterIcon,
+  ChartBarIcon,
+  CalendarIcon,
+  CreditCardIcon,
+  LoadingIcon
+} from '../../components/Icons';
 
 interface FixedExpense {
   id: number;
@@ -50,6 +64,7 @@ const FixedExpensesDashboard: React.FC = () => {
     atrasado: 0,
     total: 0
   });
+  const [statusTotals, setStatusTotals] = useState<{ pago: number; pendente: number; atrasado: number }>({ pago: 0, pendente: 0, atrasado: 0 });
   const [monthlyTotal, setMonthlyTotal] = useState(0);
   const [upcomingExpenses, setUpcomingExpenses] = useState<FixedExpense[]>([]);
 
@@ -127,7 +142,8 @@ const FixedExpensesDashboard: React.FC = () => {
       }
       
       const summary = categoryMap.get(categoryName)!;
-      summary.total += expense.amount;
+      // Ensure amount is numeric to avoid NaN and string concatenation
+      summary.total += Number((expense as any).amount || 0);
       summary.count += 1;
       summary.items.push(expense);
     });
@@ -141,10 +157,20 @@ const FixedExpensesDashboard: React.FC = () => {
       return acc;
     }, { pago: 0, pendente: 0, atrasado: 0, total: 0 });
 
+    // Totais por status
+    const totals = { pago: 0, pendente: 0, atrasado: 0 };
+    for (const e of expensesData) {
+      const amt = Number((e as any).amount || 0);
+      if (e.payment_status === 'pago') totals.pago += amt;
+      else if (e.payment_status === 'pendente') totals.pendente += amt;
+      else totals.atrasado += amt;
+    }
+
     setStatusCounts(counts);
+    setStatusTotals(totals);
 
     // Total mensal
-    const total = expensesData.reduce((sum, expense) => sum + expense.amount, 0);
+    const total = expensesData.reduce((sum, expense) => sum + Number((expense as any).amount || 0), 0);
     setMonthlyTotal(total);
 
     // Próximos vencimentos (próximos 7 dias)
@@ -253,151 +279,160 @@ const FixedExpensesDashboard: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-400"></div>
+      <ModernLayout
+        title="Dashboard de Gastos Fixos"
+        subtitle="Carregando dados..."
+        headerActions={<MonthSelector />}
+      >
+        <div className="flex items-center justify-center py-12">
+          <div className="flex items-center gap-3 text-white/70">
+            <LoadingIcon className="w-6 h-6 animate-spin" />
+            <span>Carregando dados...</span>
+          </div>
         </div>
-      </div>
+      </ModernLayout>
     );
   }
 
   return (
-    <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="heading text-3xl font-bold">Dashboard de Gastos Fixos</h1>
-          <p className="text-[color:var(--text-dim)] mt-1">
-            Visão completa dos seus gastos recorrentes
-          </p>
-        </div>
+    <ModernLayout
+      title="Dashboard de Gastos Fixos"
+      subtitle="Visão completa dos seus gastos recorrentes"
+      headerActions={
         <div className="flex items-center gap-3">
           <MonthSelector />
-          <Link
-            to="/fixed"
-            className="btn-primary text-sm flex items-center gap-2"
+          <ModernButton
+            variant="primary"
+            size="sm"
+            onClick={() => window.location.href = '/fixed'}
+            className="flex items-center gap-2"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-              <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-            </svg>
+            <PlusIcon className="w-4 h-4" />
             Gerenciar Gastos
-          </Link>
+          </ModernButton>
         </div>
-      </div>
-
+      }
+    >
       {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm text-[color:var(--text-dim)]">Total Mensal</p>
-              <p className="text-2xl font-bold text-[color:var(--text)]">
-                {fmtCurrency(monthlyTotal)}
-              </p>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-blue-500/20 border border-blue-500/30">
+              <CashIcon className="w-6 h-6 text-blue-400" />
             </div>
-            <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
-              <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16" className="text-blue-400">
-                <path d="M4 10.781c.148 1.667 1.513 2.85 3.591 3.003V15h1.043v-1.216c2.27-.179 3.678-1.438 3.678-3.3 0-1.59-.947-2.51-2.956-3.028l-.722-.187V3.467c1.122.11 1.879.714 2.07 1.616h1.47c-.166-1.6-1.54-2.748-3.54-2.875V1H7.591v1.233c-1.939.23-3.27 1.472-3.27 3.156 0 1.454.966 2.483 2.661 2.917l.61.162v4.031c-1.149-.17-1.94-.8-2.131-1.718H4zm3.391-3.836c-1.043-.263-1.6-.825-1.6-1.616 0-.944.704-1.641 1.8-1.828v3.495l-.2-.05zm1.591 1.872c1.287.323 1.852.859 1.852 1.769 0 1.097-.826 1.828-2.2 1.939V8.73l.348.086z"/>
-              </svg>
+            <div>
+              <p className="text-white/70 text-sm">Total Mensal</p>
+              <p className="text-2xl font-bold text-white">{fmtCurrency(monthlyTotal)}</p>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="mt-4 space-y-2">
             {expenses.slice(0, 3).map((expense) => (
-              <div key={expense.id} className="text-xs text-[color:var(--text-dim)] flex justify-between">
+              <div key={expense.id} className="flex justify-between items-center text-xs text-white/60">
                 <span className="truncate">{expense.description}</span>
-                <span className="ml-2 font-medium">{fmtCurrency(expense.amount)}</span>
+                <span className="ml-2 font-medium text-white/80">{fmtCurrency(expense.amount)}</span>
               </div>
             ))}
             {expenses.length > 3 && (
-              <div className="text-xs text-[color:var(--text-dim)] italic">
+              <div className="text-xs text-white/50 italic">
                 +{expenses.length - 3} outros gastos
               </div>
             )}
           </div>
-        </div>
+        </ModernCard>
 
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm text-[color:var(--text-dim)]">Pagos</p>
-              <p className="text-2xl font-bold text-green-400">{statusCounts.pago}</p>
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-green-500/20 border border-green-500/30">
+              <CheckIcon className="w-6 h-6 text-green-400" />
             </div>
-            <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
-              <span className="text-2xl">✅</span>
+            <div>
+              <p className="text-white/70 text-sm">Pagos</p>
+                    <p className="text-2xl font-bold text-green-400">{statusCounts.pago}</p>
+                    <p className="text-xs text-green-300 mt-1">{fmtCurrency(statusTotals.pago)}</p>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="mt-4 space-y-2">
             {expenses.filter(e => e.payment_status === 'pago').slice(0, 3).map((expense) => (
-              <div key={expense.id} className="text-xs text-green-300/80 flex justify-between">
+              <div key={expense.id} className="flex justify-between items-center text-xs text-green-300/80">
                 <span className="truncate">{expense.description}</span>
                 <span className="ml-2 font-medium">{fmtCurrency(expense.amount)}</span>
               </div>
             ))}
             {expenses.filter(e => e.payment_status === 'pago').length === 0 && (
-              <div className="text-xs text-[color:var(--text-dim)] italic">
+              <div className="text-xs text-white/50 italic">
                 Nenhum gasto pago
               </div>
             )}
           </div>
-        </div>
+        </ModernCard>
 
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm text-[color:var(--text-dim)]">Pendentes</p>
-              <p className="text-2xl font-bold text-amber-400">{statusCounts.pendente}</p>
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-yellow-500/20 border border-yellow-500/30">
+              <CalendarIcon className="w-6 h-6 text-yellow-400" />
             </div>
-            <div className="w-12 h-12 bg-amber-500/20 rounded-full flex items-center justify-center">
-              <span className="text-2xl">⏳</span>
+            <div>
+              <p className="text-white/70 text-sm">Pendentes</p>
+                    <p className="text-2xl font-bold text-yellow-400">{statusCounts.pendente}</p>
+                    <p className="text-xs text-yellow-300 mt-1">{fmtCurrency(statusTotals.pendente)}</p>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="mt-4 space-y-2">
             {expenses.filter(e => e.payment_status === 'pendente').slice(0, 3).map((expense) => (
-              <div key={expense.id} className="text-xs text-amber-300/80 flex justify-between">
+              <div key={expense.id} className="flex justify-between items-center text-xs text-yellow-300/80">
                 <span className="truncate">{expense.description}</span>
                 <span className="ml-2 font-medium">{fmtCurrency(expense.amount)}</span>
               </div>
             ))}
             {expenses.filter(e => e.payment_status === 'pendente').length === 0 && (
-              <div className="text-xs text-[color:var(--text-dim)] italic">
+              <div className="text-xs text-white/50 italic">
                 Nenhum gasto pendente
               </div>
             )}
           </div>
-        </div>
+        </ModernCard>
 
-        <div className="card p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="text-sm text-[color:var(--text-dim)]">Atrasados</p>
-              <p className="text-2xl font-bold text-red-400">{statusCounts.atrasado}</p>
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-4">
+            <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/30">
+              <ClearIcon className="w-6 h-6 text-red-400" />
             </div>
-            <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
-              <span className="text-2xl">🔴</span>
+            <div>
+              <p className="text-white/70 text-sm">Atrasados</p>
+                    <p className="text-2xl font-bold text-red-400">{statusCounts.atrasado}</p>
+                    <p className="text-xs text-red-300 mt-1">{fmtCurrency(statusTotals.atrasado)}</p>
             </div>
           </div>
-          <div className="space-y-1">
+          <div className="mt-4 space-y-2">
             {expenses.filter(e => e.payment_status === 'atrasado').slice(0, 3).map((expense) => (
-              <div key={expense.id} className="text-xs text-red-300/80 flex justify-between">
+              <div key={expense.id} className="flex justify-between items-center text-xs text-red-300/80">
                 <span className="truncate">{expense.description}</span>
                 <span className="ml-2 font-medium">{fmtCurrency(expense.amount)}</span>
               </div>
             ))}
             {expenses.filter(e => e.payment_status === 'atrasado').length === 0 && (
-              <div className="text-xs text-[color:var(--text-dim)] italic">
+              <div className="text-xs text-white/50 italic">
                 Nenhum gasto atrasado
               </div>
             )}
           </div>
-        </div>
+        </ModernCard>
       </div>
 
       {/* Gráfico de Categorias e Próximos Vencimentos */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Resumo por Categoria */}
-        <div className="card p-6">
-          <h3 className="heading text-lg font-semibold mb-4">Gastos por Categoria</h3>
-          <div className="space-y-3">
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-cyan-500/20 border border-cyan-500/30">
+              <ChartBarIcon className="w-5 h-5 text-cyan-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Gastos por Categoria</h3>
+              <p className="text-white/70 text-sm">Distribuição dos gastos fixos</p>
+            </div>
+          </div>
+          <div className="space-y-4">
             {categorySummary.slice(0, 5).map((category, index) => {
               const maxTotal = categorySummary[0]?.total || 1;
               const percentage = (category.total / maxTotal) * 100;
@@ -405,10 +440,10 @@ const FixedExpensesDashboard: React.FC = () => {
               return (
                 <div key={category.category} className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{category.category}</span>
+                    <span className="text-sm font-medium text-white">{category.category}</span>
                     <div className="text-right">
-                      <div className="text-sm font-semibold">{fmtCurrency(category.total)}</div>
-                      <div className="text-xs text-[color:var(--text-dim)]">
+                      <div className="text-sm font-semibold text-white">{fmtCurrency(category.total)}</div>
+                      <div className="text-xs text-white/60">
                         {category.count} {category.count === 1 ? 'item' : 'itens'}
                       </div>
                     </div>
@@ -423,26 +458,34 @@ const FixedExpensesDashboard: React.FC = () => {
               );
             })}
           </div>
-        </div>
+        </ModernCard>
 
         {/* Próximos Vencimentos */}
-        <div className="card p-6">
-          <h3 className="heading text-lg font-semibold mb-4">Próximos Vencimentos</h3>
+        <ModernCard className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="p-2 rounded-lg bg-orange-500/20 border border-orange-500/30">
+              <CalendarIcon className="w-5 h-5 text-orange-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Próximos Vencimentos</h3>
+              <p className="text-white/70 text-sm">Gastos que vencem em breve</p>
+            </div>
+          </div>
           <div className="space-y-3">
             {upcomingExpenses.length > 0 ? (
               upcomingExpenses.slice(0, 5).map((expense) => (
-                <div key={expense.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                <div key={expense.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10 hover:bg-white/10 transition-colors">
                   <div className="flex items-center gap-3">
                     <span className="text-lg">{getStatusIcon(expense.payment_status)}</span>
                     <div>
-                      <div className="font-medium">{expense.description}</div>
-                      <div className="text-xs text-[color:var(--text-dim)]">
+                      <div className="font-medium text-white">{expense.description}</div>
+                      <div className="text-xs text-white/60">
                         {expense.category_name} • {new Date(expense.next_run).toLocaleDateString('pt-BR')}
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="font-semibold">{fmtCurrency(expense.amount)}</div>
+                    <div className="font-semibold text-white">{fmtCurrency(expense.amount)}</div>
                     <div className={`text-xs px-2 py-1 rounded-full ${getStatusColor(expense.payment_status)}`}>
                       {expense.payment_status}
                     </div>
@@ -450,37 +493,48 @@ const FixedExpensesDashboard: React.FC = () => {
                 </div>
               ))
             ) : (
-              <div className="text-center py-8 text-[color:var(--text-dim)]">
-                <span className="text-4xl mb-2 block">🎉</span>
-                <p>Nenhum vencimento próximo!</p>
+              <div className="text-center py-8">
+                <div className="text-4xl mb-3">🎉</div>
+                <div className="text-sm text-white/70">Nenhum vencimento próximo!</div>
               </div>
             )}
           </div>
-        </div>
+        </ModernCard>
       </div>
 
       {/* Filtros e Tabela */}
-      <div className="card p-6">
+      <ModernCard className="p-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-          <h3 className="heading text-lg font-semibold">Todos os Gastos Fixos</h3>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-purple-500/20 border border-purple-500/30">
+              <FilterIcon className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-white">Todos os Gastos Fixos</h3>
+              <p className="text-white/70 text-sm">Lista completa com filtros</p>
+            </div>
+          </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              placeholder="Buscar por descrição..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input px-3 py-2 text-sm min-w-[200px]"
-            />
+            <div className="relative">
+              <SearchIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-white/50" />
+              <input
+                type="text"
+                placeholder="Buscar por descrição..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent min-w-[200px]"
+              />
+            </div>
             
             <select
               value={selectedCategory}
               onChange={(e) => setSelectedCategory(e.target.value)}
-              className="input px-3 py-2 text-sm"
+              className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             >
-              <option value="all">Todas as categorias</option>
+              <option value="all" className="bg-gray-800">Todas as categorias</option>
               {categorySummary.map((cat) => (
-                <option key={cat.category} value={cat.category}>
+                <option key={cat.category} value={cat.category} className="bg-gray-800">
                   {cat.category}
                 </option>
               ))}
@@ -489,12 +543,12 @@ const FixedExpensesDashboard: React.FC = () => {
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              className="input px-3 py-2 text-sm"
+              className="px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
             >
-              <option value="all">Todos os status</option>
-              <option value="pago">Pagos</option>
-              <option value="pendente">Pendentes</option>
-              <option value="atrasado">Atrasados</option>
+              <option value="all" className="bg-gray-800">Todos os status</option>
+              <option value="pago" className="bg-gray-800">Pagos</option>
+              <option value="pendente" className="bg-gray-800">Pendentes</option>
+              <option value="atrasado" className="bg-gray-800">Atrasados</option>
             </select>
           </div>
         </div>
@@ -503,23 +557,23 @@ const FixedExpensesDashboard: React.FC = () => {
           <table className="w-full">
             <thead>
               <tr className="border-b border-white/10">
-                <th className="text-left py-3 px-2 text-sm font-medium text-[color:var(--text-dim)]">Descrição</th>
-                <th className="text-left py-3 px-2 text-sm font-medium text-[color:var(--text-dim)]">Categoria</th>
-                <th className="text-left py-3 px-2 text-sm font-medium text-[color:var(--text-dim)]">Valor</th>
-                <th className="text-left py-3 px-2 text-sm font-medium text-[color:var(--text-dim)]">Vencimento</th>
-                <th className="text-left py-3 px-2 text-sm font-medium text-[color:var(--text-dim)]">Status</th>
+                <th className="text-left py-3 px-2 text-sm font-medium text-white/70">Descrição</th>
+                <th className="text-left py-3 px-2 text-sm font-medium text-white/70">Categoria</th>
+                <th className="text-left py-3 px-2 text-sm font-medium text-white/70">Valor</th>
+                <th className="text-left py-3 px-2 text-sm font-medium text-white/70">Vencimento</th>
+                <th className="text-left py-3 px-2 text-sm font-medium text-white/70">Status</th>
               </tr>
             </thead>
             <tbody>
               {filteredExpenses.map((expense) => (
                 <tr key={expense.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                   <td className="py-3 px-2">
-                    <div className="font-medium">{expense.description}</div>
-                    <div className="text-xs text-[color:var(--text-dim)]">{expense.account_name}</div>
+                    <div className="font-medium text-white">{expense.description}</div>
+                    <div className="text-xs text-white/60">{expense.account_name}</div>
                   </td>
                   <td className="py-3 px-2 text-sm">{expense.category_name}</td>
-                  <td className="py-3 px-2 font-semibold">{fmtCurrency(expense.amount)}</td>
-                  <td className="py-3 px-2 text-sm">
+                  <td className="py-3 px-2 font-semibold text-white font-mono">{fmtCurrency(expense.amount)}</td>
+                  <td className="py-3 px-2 text-sm text-white/80">
                     {new Date(expense.next_run).toLocaleDateString('pt-BR')}
                   </td>
                   <td className="py-3 px-2">
@@ -534,14 +588,14 @@ const FixedExpensesDashboard: React.FC = () => {
           </table>
           
           {filteredExpenses.length === 0 && (
-            <div className="text-center py-8 text-[color:var(--text-dim)]">
-              <span className="text-4xl mb-2 block">🔍</span>
-              <p>Nenhum gasto encontrado com os filtros aplicados.</p>
+            <div className="text-center py-8">
+              <div className="text-4xl mb-3">🔍</div>
+              <div className="text-sm text-white/70">Nenhum gasto encontrado com os filtros aplicados.</div>
             </div>
           )}
         </div>
-      </div>
-    </div>
+      </ModernCard>
+    </ModernLayout>
   );
 };
 

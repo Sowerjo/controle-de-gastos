@@ -3,6 +3,16 @@ import api from '../../services/api';
 import { fmtCurrency } from '../../utils/format';
 import { useMonth } from '../../contexts/MonthContext';
 import MonthSelector from '../../components/MonthSelector';
+import ModernLayout, { ModernCard, ModernButton } from '../../components/Layout/ModernLayout';
+import { 
+  ChartBarIcon, 
+  PlusIcon, 
+  TrashIcon, 
+  EditIcon, 
+  CashIcon, 
+  CheckIcon, 
+  ClearIcon 
+} from '../../components/Icons';
 
 export default function Budgets() {
   const { formatMonthForInput } = useMonth();
@@ -79,44 +89,151 @@ export default function Budgets() {
       await load(); // Recarrega para restaurar o valor original
     }
   };
+  const totalBudget = items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const totalSpent = items.reduce((sum, item) => sum + (spentByCat[item.category_id] || 0), 0);
+  const budgetUsage = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+
   return (
-    <div className="p-4">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="heading text-2xl">Orçamentos</h1>
-        <MonthSelector />
-      </div>
-      <form onSubmit={save} className="flex gap-2 mb-4 items-center">
-        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value? Number(e.target.value): '')} className="input px-2 py-1">
-          <option value="">Categoria…</option>
-          {cats.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
-        </select>
-        <input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="Valor" className="input px-2 py-1 tnum" />
-        <button className="btn-primary">Salvar</button>
-      </form>
-      <div className="overflow-auto card">
-        <table className="min-w-[480px] w-full text-sm">
-          <thead><tr className="text-left"><th className="p-2">Categoria</th><th className="p-2">Orçado</th><th className="p-2">Gasto</th><th className="p-2">% do orçamento</th><th className="p-2">Rollover</th><th></th></tr></thead>
-          <tbody>
+    <ModernLayout 
+      title="Orçamentos" 
+      subtitle={`${totalBudget > 0 ? `Orçamento total: ${fmtCurrency(totalBudget)} • ` : ''}${totalSpent > 0 ? `Gasto: ${fmtCurrency(totalSpent)} • ` : ''}${budgetUsage.toFixed(1)}% utilizado`}
+      headerActions={<MonthSelector />}
+    >
+      <ModernCard className="mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-8 h-8 bg-gradient-to-r from-green-500 to-emerald-500 rounded-lg flex items-center justify-center">
+            <PlusIcon className="text-white" size={16} />
+          </div>
+          <h3 className="text-lg font-semibold text-white">Novo Orçamento</h3>
+        </div>
+        
+        <form onSubmit={save} className="flex flex-col sm:flex-row gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-white/70 mb-2">Categoria</label>
+            <select 
+              value={categoryId} 
+              onChange={(e) => setCategoryId(e.target.value? Number(e.target.value): '')} 
+              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">Selecione uma categoria...</option>
+              {cats.map((c) => (<option key={c.id} value={c.id}>{c.name}</option>))}
+            </select>
+          </div>
+          
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-white/70 mb-2">Valor Orçado</label>
+            <input 
+              inputMode="decimal" 
+              value={amount} 
+              onChange={(e) => setAmount(e.target.value)} 
+              placeholder="R$ 0,00" 
+              className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tnum" 
+            />
+          </div>
+          
+          <div className="flex items-end">
+            <ModernButton type="submit" disabled={!categoryId || !amount}>
+              <PlusIcon size={16} />
+              Adicionar
+            </ModernButton>
+          </div>
+        </form>
+      </ModernCard>
+      <ModernCard>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-8 h-8 bg-gradient-to-r from-blue-500 to-purple-500 rounded-lg flex items-center justify-center">
+            <ChartBarIcon className="text-white" size={16} />
+          </div>
+          <h3 className="text-lg font-semibold text-white">Orçamentos por Categoria</h3>
+        </div>
+        
+        <div className="overflow-auto">
+          <table className="min-w-[480px] w-full text-sm">
+            <thead>
+              <tr className="text-left border-b border-white/10">
+                <th className="p-3 text-white/70 font-medium">Categoria</th>
+                <th className="p-3 text-white/70 font-medium">Orçado</th>
+                <th className="p-3 text-white/70 font-medium">Gasto</th>
+                <th className="p-3 text-white/70 font-medium">% Utilizado</th>
+                <th className="p-3 text-white/70 font-medium">Rollover</th>
+                <th className="p-3 text-white/70 font-medium text-right">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
             {items.map((b) => {
               const spent = spentByCat[b.category_id] || 0;
               const ratio = Number(b.amount||0) > 0 ? (spent / Number(b.amount)) : 0;
+              const getStatusIcon = () => {
+                 if (ratio < 0.8) return <CheckIcon className="text-green-400" size={16} />;
+                 if (ratio <= 1) return <EditIcon className="text-yellow-400" size={16} />;
+                 return <ClearIcon className="text-red-400" size={16} />;
+                };
+              const getStatusColor = () => {
+                if (ratio < 0.8) return 'text-green-400';
+                if (ratio <= 1) return 'text-yellow-400';
+                return 'text-red-400';
+              };
               return (
-                <tr key={b.id} className={`border-t border-white/5 ${heatClass(b.category_id)}`}>
-                  <td className="p-2">{b.category}</td>
-                  <td className="p-2 tnum">
+                <tr key={b.id} className={`border-t border-white/5 hover:bg-white/5 transition-colors ${heatClass(b.category_id)}`}>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon()}
+                      <span className="text-white font-medium">{b.category}</span>
+                    </div>
+                  </td>
+                  <td className="p-3 tnum">
                     <InlineMoney value={Number(b.amount||0)} onChange={(v) => updateInline(b.id, v)} />
                   </td>
-                  <td className="p-2 tnum">{fmtCurrency(spent)}</td>
-                  <td className="p-2">{(ratio*100).toFixed(0)}%</td>
-                  <td className="p-2"><input type="checkbox" checked={rollover} onChange={(e) => setRollover(e.target.checked)} /></td>
-                  <td className="p-2 text-right"><button onClick={() => del(b.id)} className="text-red-400 hover:text-red-300">Excluir</button></td>
+                  <td className="p-3 tnum text-white">{fmtCurrency(spent)}</td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-2">
+                      <span className={`font-semibold ${getStatusColor()}`}>
+                        {(ratio*100).toFixed(0)}%
+                      </span>
+                      <div className="flex-1 bg-white/10 rounded-full h-2 max-w-[60px]">
+                        <div 
+                          className={`h-2 rounded-full transition-all ${
+                            ratio < 0.8 ? 'bg-green-400' : 
+                            ratio <= 1 ? 'bg-yellow-400' : 'bg-red-400'
+                          }`}
+                          style={{ width: `${Math.min(ratio * 100, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <input 
+                      type="checkbox" 
+                      checked={rollover} 
+                      onChange={(e) => setRollover(e.target.checked)} 
+                      className="w-4 h-4 text-blue-500 bg-white/10 border-white/20 rounded focus:ring-blue-500 focus:ring-2"
+                    />
+                  </td>
+                  <td className="p-3 text-right">
+                    <ModernButton 
+                      variant="danger" 
+                      size="sm" 
+                      onClick={() => del(b.id)}
+                    >
+                      <TrashIcon size={14} />
+                    </ModernButton>
+                  </td>
                 </tr>
               );
             })}
-          </tbody>
-        </table>
-      </div>
-    </div>
+            </tbody>
+          </table>
+        </div>
+        
+        {items.length === 0 && (
+          <div className="text-center py-8">
+            <CashIcon className="mx-auto text-white/30 mb-4" size={48} />
+            <p className="text-white/70 mb-2">Nenhum orçamento cadastrado</p>
+            <p className="text-white/50 text-sm">Adicione categorias ao seu orçamento para começar a controlar seus gastos</p>
+          </div>
+        )}
+      </ModernCard>
+    </ModernLayout>
   );
 }
 
@@ -125,11 +242,28 @@ function InlineMoney({ value, onChange }: { value: number; onChange: (v: number)
   const [val, setVal] = useState(String(value));
   useEffect(() => setVal(String(value)), [value]);
   return editing ? (
-    <span>
-      <input className="input px-1 py-0.5 tnum w-24" value={val} onChange={(e)=>setVal(e.target.value)} onBlur={()=>{ setEditing(false); onChange(Number(val||0)); }} onKeyDown={(e)=>{ if(e.key==='Enter'){ setEditing(false); onChange(Number(val||0)); } if(e.key==='Escape'){ setEditing(false); setVal(String(value)); } }} autoFocus />
+    <span className="flex items-center gap-1">
+      <input 
+        className="px-2 py-1 bg-white/10 border border-white/20 rounded text-white tnum w-24 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
+        value={val} 
+        onChange={(e)=>setVal(e.target.value)} 
+        onBlur={()=>{ setEditing(false); onChange(Number(val||0)); }} 
+        onKeyDown={(e)=>{ 
+          if(e.key==='Enter'){ setEditing(false); onChange(Number(val||0)); } 
+          if(e.key==='Escape'){ setEditing(false); setVal(String(value)); } 
+        }} 
+        autoFocus 
+      />
+      <EditIcon className="text-white/50" size={12} />
     </span>
   ) : (
-    <span className="cursor-text" onClick={()=>setEditing(true)}>{fmtCurrency(Number(value||0))}</span>
+    <span 
+      className="cursor-pointer text-white hover:text-blue-400 transition-colors flex items-center gap-1 group" 
+      onClick={()=>setEditing(true)}
+    >
+      {fmtCurrency(Number(value||0))}
+      <EditIcon className="text-white/30 group-hover:text-blue-400 transition-colors" size={12} />
+    </span>
   );
 }
 
