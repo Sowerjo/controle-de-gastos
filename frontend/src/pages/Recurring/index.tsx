@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import api from '../../services/api';
+import CurrencyInput, { parseBRNumber } from '../../components/CurrencyInput';
 
 export default function Recurring() {
   const [items, setItems] = useState<any[]>([]);
@@ -7,7 +8,7 @@ export default function Recurring() {
   const [form, setForm] = useState<any>({ account_id: '', type: 'DESPESA', amount: '', description: '', category_id: '', payee_id: '', interval_unit: 'month', interval_count: 1, next_run: new Date().toISOString().slice(0,10) });
   const load = async () => { const r = await api.get('/api/v1/recurring'); setItems(r.data.data || []); };
   useEffect(() => { load(); (async()=>{ const a=await api.get('/api/v1/accounts'); setAccounts(a.data.data||[]); })(); }, []);
-  const save = async (e: React.FormEvent) => { e.preventDefault(); const body={...form, amount: Number(form.amount||0)}; await api.post('/api/v1/recurring', body); setForm({...form, amount:'', description:''}); await load(); };
+  const save = async (e: React.FormEvent) => { e.preventDefault(); const body={...form, amount: parseBRNumber(String(form.amount||''))}; await api.post('/api/v1/recurring', body); setForm({...form, amount:'', description:''}); await load(); };
   const del = async (id: number) => { await api.delete('/api/v1/recurring', { params: { id } }); await load(); };
   const run = async () => { await api.post('/api/v1/recurring/run'); await load(); };
   return (
@@ -24,7 +25,7 @@ export default function Recurring() {
           <option value="DESPESA">Despesa</option>
           <option value="RECEITA">Receita</option>
         </select>
-        <input inputMode="decimal" value={form.amount} onChange={(e)=>setForm({...form, amount: e.target.value})} placeholder="Valor" className="input px-2 py-1 text-sm" />
+        <CurrencyInput inputMode="decimal" value={form.amount} onChange={(v)=>setForm({...form, amount: v})} placeholder="Valor" className="input px-2 py-1 text-sm" />
         <input value={form.description} onChange={(e)=>setForm({...form, description: e.target.value})} placeholder="Descrição" className="input px-2 py-1 text-sm" />
         <select value={form.interval_unit} onChange={(e)=>setForm({...form, interval_unit: e.target.value})} className="input px-2 py-1 text-sm">
           <option value="day">Diário</option>

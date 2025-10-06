@@ -4,6 +4,8 @@ import { notifyAccountsUpdate } from '../../hooks/useAccounts';
 import ModernLayout, { ModernCard, ModernButton, ModernInput } from '../../components/Layout/ModernLayout';
 import { ChartBarIcon, CalendarIcon, PlusIcon } from '../../components/Icons';
 import { fmtCurrency } from '../../utils/format';
+import { parseBRNumber } from '../../components/CurrencyInput';
+// Removido PayeeAutocomplete para usar seleção por dropdown com ID
 
 type Rule = {
   id: number;
@@ -29,7 +31,19 @@ export default function FixedExpenses() {
   const [payees, setPayees] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string>('');
-  const [form, setForm] = React.useState<any>({ account_id: '', amount: '', description: '', category_id: '', payee_id: '', due_day: new Date().getDate(), mode: 'manual', notify_days: 3 });
+  const [form, setForm] = React.useState<any>({ 
+    account_id: '', 
+    amount: '', 
+    description: '', 
+    category_id: '', 
+    payee_id: '', 
+    due_day: new Date().getDate(), 
+    mode: 'manual', 
+    notify_days: 3 
+  });
+  // Controle de favorecido: existente (autocomplete) ou novo (texto)
+  const [useExistingPayee, setUseExistingPayee] = React.useState<boolean>(false);
+  const [newPayeeName, setNewPayeeName] = React.useState<string>('');
   const [editId, setEditId] = React.useState<number | null>(null);
   const [editDraft, setEditDraft] = React.useState<any>({ mode: 'manual', next_run: '', notify_days: 3 });
   const [toast, setToast] = React.useState<{ type: 'info' | 'error' | 'success'; message: string } | null>(null);
@@ -41,6 +55,22 @@ export default function FixedExpenses() {
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
   const fmtCurrency = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  // Parse YYYY-MM-DD as a local Date (avoid timezone offset)
+  const parseYMDToLocalDate = (s: string) => {
+    const parts = String(s).split('-');
+    const y = Number(parts[0] || 0);
+    const m = Number(parts[1] || 1);
+    const d = Number(parts[2] || 1);
+    return new Date(y, m - 1, d);
+  };
+  const formatYMDToBR = (s: string) => {
+    const parts = String(s).split('-');
+    const y = parts[0] || '';
+    const m = parts[1] || '';
+    const d = parts[2] || '';
+    if (!y || !m || !d) return s;
+    return `${String(d).padStart(2,'0')}/${String(m).padStart(2,'0')}/${y}`;
+  };
 
   const load = async () => {
     setLoading(true); setError('');
@@ -62,26 +92,102 @@ export default function FixedExpenses() {
 
   React.useEffect(() => { load(); }, []);
 
+  // Quando alternar para novo favorecido, limpamos o payee_id
+  React.useEffect(() => {
+    if (!useExistingPayee) {
+      setForm((prev:any) => ({ ...prev, payee_id: '' }));
+    }
+  }, [useExistingPayee]);
+
   const save = async (e: React.FormEvent) => {
     e.preventDefault(); setError('');
     try {
       const dueDay = Number(form.due_day || 1);
-      const nextRun = new Date(today.getFullYear(), today.getMonth(), dueDay);
+      // Calcular next_run com base no mês atual e dia de vencimento informado
+      const selYear = today.getFullYear();
+      const selMonthIndex = today.getMonth(); // mês atual (0-based)
+      // Garantir que o dia não ultrapasse o último dia do mês atual
+      const daysInSelectedMonth = new Date(selYear, selMonthIndex + 1, 0).getDate();
+      const dueDayClamped = Math.max(1, Math.min(dueDay, daysInSelectedMonth));
+      // Construir string de data sem conversão de timezone para evitar offset de 1 dia
+      const nextRunStr = `${selYear}-${String(selMonthIndex + 1).padStart(2,'0')}-${String(dueDayClamped).padStart(2,'0')}`;
+      // Resolver favorecido conforme a escolha
+      let payeeId: number | null = form.payee_id ? Number(form.payee_id) : null;
+      if (useExistingPayee) {
+        if (!payeeId) {
+          setError('Selecione um favorecido existente válido.');
+          return;
+        }
+      } else {
+        const name = (newPayeeName || '').trim();
+        if (name.length > 0) {
+          // 1) Primeiro, tente localizar um favorecido existente por nome (evita erro 500 por duplicidade)
+          const existing = payees.find((p:any) => (p.name||'').trim().toLowerCase() === name.toLowerCase());
+          if (existing) {
+            payeeId = Number(existing.id);
+          } else {
+            // 2) Criar novo favorecido; backend retorna apenas {ok:true}, então recarregamos e buscamos novamente
+            try {
+              await api.post('/api/v1/payees', { name });
+            } catch (pe: any) {
+              // Se ocorreu erro (ex.: duplicidade), ainda tentamos localizar por nome para seguir
+              try { 
+                const p = await api.get('/api/v1/payees'); 
+                const list = p.data.data || []; 
+                setPayees(list);
+                const match = list.find((x:any) => (x.name||'').trim().toLowerCase() === name.toLowerCase());
+                if (match) {
+                  payeeId = Number(match.id);
+                } else {
+                  const msg = pe?.response?.data?.error?.message || pe?.message || 'Falha ao criar favorecido';
+                  setError(msg);
+                  return;
+                }
+              } catch {
+                const msg = pe?.response?.data?.error?.message || pe?.message || 'Falha ao criar favorecido';
+                setError(msg);
+                return;
+              }
+            }
+            // Após criar sem erro, recarregamos e pegamos o ID pelo nome
+            if (!payeeId) {
+              try { 
+                const p = await api.get('/api/v1/payees'); 
+                const list = p.data.data || []; 
+                setPayees(list);
+                const match = list.find((x:any) => (x.name||'').trim().toLowerCase() === name.toLowerCase());
+                payeeId = match ? Number(match.id) : null; 
+              } catch {}
+            }
+          }
+        }
+      }
       const payload: any = {
         account_id: Number(form.account_id),
         type: 'DESPESA',
-        amount: Number(String(form.amount).replace(/\./g,'').replace(',','.')),
+        amount: parseBRNumber(form.amount),
         description: form.description || 'Gasto Fixo',
         category_id: form.category_id ? Number(form.category_id) : null,
-        payee_id: form.payee_id ? Number(form.payee_id) : null,
+        payee_id: payeeId ?? null,
         interval_unit: 'month',
         interval_count: 1,
-        next_run: nextRun.toISOString().slice(0,10),
+        next_run: nextRunStr,
         mode: form.mode,
         notify_days: Number(form.notify_days || 3),
       };
       await api.post('/api/v1/recurring', payload);
-      setForm({ account_id: '', amount: '', description: '', category_id: '', payee_id: '', due_day: new Date().getDate(), mode: form.mode, notify_days: form.notify_days });
+      setForm({ 
+        account_id: '', 
+        amount: '', 
+        description: '', 
+        category_id: '', 
+        payee_id: '', 
+        due_day: new Date().getDate(), 
+        mode: form.mode, 
+        notify_days: form.notify_days 
+      });
+      setUseExistingPayee(false);
+      setNewPayeeName('');
       await load();
     } catch (e: any) { setError(e?.response?.data?.error?.message || e?.message || 'Erro ao salvar'); }
   };
@@ -104,8 +210,8 @@ export default function FixedExpenses() {
   };
 
   const statusOf = (r: Rule) => {
-    const nr = new Date(r.next_run);
-    const lr = r.last_run ? new Date(r.last_run) : null;
+    const nr = parseYMDToLocalDate(r.next_run);
+    const lr = r.last_run ? parseYMDToLocalDate(r.last_run) : null;
     const paidThisMonth = lr && lr >= monthStart && lr <= monthEnd;
     if (paidThisMonth) return 'pago';
     if (nr < today) return 'atrasado';
@@ -113,7 +219,7 @@ export default function FixedExpenses() {
   };
 
   const monthForecast = items.filter(r => {
-    const nr = new Date(r.next_run);
+    const nr = parseYMDToLocalDate(r.next_run);
     return nr >= monthStart && nr <= monthEnd && r.type === 'DESPESA';
   }).reduce((sum, r) => sum + Number(r.amount || 0), 0);
 
@@ -256,7 +362,7 @@ export default function FixedExpenses() {
                     <div key={i} className="p-3 bg-white/5 rounded-lg border border-white/10 flex items-center justify-between">
                       <div>
                         <div className="text-white font-medium">{r.description || 'Gasto Fixo'}</div>
-                        <div className="text-white/60 text-xs">{new Date(r.next_run).toLocaleDateString('pt-BR')}</div>
+                        <div className="text-white/60 text-xs">{formatYMDToBR(r.next_run)}</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-white/80 font-semibold">{fmtCurrency(Number(r.amount||0))}</span>
@@ -294,8 +400,8 @@ export default function FixedExpenses() {
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
               required
             >
-              <option value="">Selecione uma conta…</option>
-              {accounts.map((a:any)=>(<option key={a.id} value={a.id}>{a.name}</option>))}
+              <option value="" className="bg-gray-800 text-white">Selecione uma conta…</option>
+              {accounts.map((a:any)=>(<option key={a.id} value={a.id} className="bg-gray-800 text-white">{a.name}</option>))}
             </select>
           </div>
 
@@ -328,21 +434,37 @@ export default function FixedExpenses() {
               onChange={(e)=>setForm({...form, category_id: e.target.value})} 
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
             >
-              <option value="">Selecione uma categoria…</option>
-              {categories.filter((c:any)=>c.type==='DESPESA').map((c:any)=>(<option key={c.id} value={c.id}>{c.name}</option>))}
+              <option value="" className="bg-gray-800 text-white">Selecione uma categoria…</option>
+              {categories.filter((c:any)=>c.type==='DESPESA').map((c:any)=>(<option key={c.id} value={c.id} className="bg-gray-800 text-white">{c.name}</option>))}
             </select>
           </div>
 
           <div className="md:col-span-1">
             <label className="block text-sm font-medium mb-1">Favorecido (quem recebe)</label>
-            <select 
-              value={form.payee_id} 
-              onChange={(e)=>setForm({...form, payee_id: e.target.value})} 
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
-            >
-              <option value="">Selecione um favorecido…</option>
-              {payees.map((p:any)=>(<option key={p.id} value={p.id}>{p.name}</option>))}
-            </select>
+            <div className="flex items-center gap-2 mb-2">
+              <input type="checkbox" checked={useExistingPayee} onChange={(e)=> setUseExistingPayee(e.target.checked)} />
+              <span className="text-sm text-white/80">Usar favorecido existente</span>
+            </div>
+            {useExistingPayee ? (
+              <select 
+                value={form.payee_id}
+                onChange={(e)=>setForm({...form, payee_id: Number(e.target.value)})}
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+              >
+                <option value="" className="bg-gray-800 text-white">Selecione um favorecido…</option>
+                {payees.map((p:any)=>(
+                  <option key={p.id} value={p.id} className="bg-gray-800 text-white">{p.name}</option>
+                ))}
+              </select>
+            ) : (
+              <input 
+                type="text" 
+                value={newPayeeName}
+                onChange={(e)=> setNewPayeeName(e.target.value)}
+                placeholder="Digite o novo favorecido"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
+              />
+            )}
           </div>
 
           <div className="md:col-span-1">
@@ -365,8 +487,8 @@ export default function FixedExpenses() {
               onChange={(e)=>setForm({...form, mode: e.target.value})} 
               className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all duration-200 backdrop-blur-sm"
             >
-              <option value="manual">Manual (você confirma o pagamento)</option>
-              <option value="automatic">Automático (gera na data de vencimento)</option>
+              <option value="manual" className="bg-gray-800 text-white">Manual (você confirma o pagamento)</option>
+              <option value="automatic" className="bg-gray-800 text-white">Automático (gera na data de vencimento)</option>
             </select>
           </div>
 
@@ -415,10 +537,10 @@ export default function FixedExpenses() {
               value={statusFilter} 
               onChange={(e)=>setStatusFilter(e.target.value as any)}
             >
-              <option value="all">Todos</option>
-              <option value="pendente">Pendentes</option>
-              <option value="atrasado">Atrasados</option>
-              <option value="pago">Pagos</option>
+              <option value="all" className="bg-gray-800 text-white">Todos</option>
+              <option value="pendente" className="bg-gray-800 text-white">Pendentes</option>
+              <option value="atrasado" className="bg-gray-800 text-white">Atrasados</option>
+              <option value="pago" className="bg-gray-800 text-white">Pagos</option>
             </select>
           </div>
           
@@ -429,8 +551,8 @@ export default function FixedExpenses() {
               value={accountFilter} 
               onChange={(e)=>setAccountFilter(e.target.value ? Number(e.target.value) : '')}
             >
-              <option value="">Todas</option>
-              {accounts.map((a:any)=>(<option key={a.id} value={a.id}>{a.name}</option>))}
+              <option value="" className="bg-gray-800 text-white">Todas</option>
+              {accounts.map((a:any)=>(<option key={a.id} value={a.id} className="bg-gray-800 text-white">{a.name}</option>))}
             </select>
           </div>
           <div className="md:hidden">
@@ -487,8 +609,8 @@ export default function FixedExpenses() {
                           value={editDraft.mode} 
                           onChange={(e)=>setEditDraft({...editDraft, mode: e.target.value})}
                         >
-                          <option value="manual">Manual</option>
-                          <option value="automatic">Automático</option>
+                          <option value="manual" className="bg-gray-800 text-white">Manual</option>
+                          <option value="automatic" className="bg-gray-800 text-white">Automático</option>
                         </select>
                       ) : (
                         (r.mode||'manual')==='automatic'?'Automático':'Manual'
@@ -515,7 +637,7 @@ export default function FixedExpenses() {
                           value={editDraft.next_run} 
                           onChange={(e)=>setEditDraft({...editDraft, next_run: e.target.value})} 
                         />
-                      ) : new Date(r.next_run).toLocaleDateString('pt-BR')}
+                      ) : formatYMDToBR(r.next_run)}
                     </td>
                     <td className="py-3 px-2 text-right">
                       <div className="flex items-center justify-end gap-2">

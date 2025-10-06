@@ -347,8 +347,8 @@ const FixedExpensesDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-white/70 text-sm">Pagos</p>
-                    <p className="text-2xl font-bold text-green-400">{statusCounts.pago}</p>
-                    <p className="text-xs text-green-300 mt-1">{fmtCurrency(statusTotals.pago)}</p>
+                    <p className="text-2xl font-bold text-green-400">{fmtCurrency(statusTotals.pago)}</p>
+                    <p className="text-xs text-green-300 mt-1">{statusCounts.pago} {statusCounts.pago === 1 ? 'item' : 'itens'}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">
@@ -373,8 +373,8 @@ const FixedExpensesDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-white/70 text-sm">Pendentes</p>
-                    <p className="text-2xl font-bold text-yellow-400">{statusCounts.pendente}</p>
-                    <p className="text-xs text-yellow-300 mt-1">{fmtCurrency(statusTotals.pendente)}</p>
+                    <p className="text-2xl font-bold text-yellow-400">{fmtCurrency(statusTotals.pendente)}</p>
+                    <p className="text-xs text-yellow-300 mt-1">{statusCounts.pendente} {statusCounts.pendente === 1 ? 'item' : 'itens'}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">
@@ -399,8 +399,8 @@ const FixedExpensesDashboard: React.FC = () => {
             </div>
             <div>
               <p className="text-white/70 text-sm">Atrasados</p>
-                    <p className="text-2xl font-bold text-red-400">{statusCounts.atrasado}</p>
-                    <p className="text-xs text-red-300 mt-1">{fmtCurrency(statusTotals.atrasado)}</p>
+                    <p className="text-2xl font-bold text-red-400">{fmtCurrency(statusTotals.atrasado)}</p>
+                    <p className="text-xs text-red-300 mt-1">{statusCounts.atrasado} {statusCounts.atrasado === 1 ? 'item' : 'itens'}</p>
             </div>
           </div>
           <div className="mt-4 space-y-2">

@@ -24,7 +24,18 @@ export default function Categories() {
   const load = async () => {
     try {
       const res = await api.get('/api/v1/categories');
-      setItems(res.data.data || []);
+      // Suporta ambos backends (PHP retorna { data: [...] }, Node retorna [...])
+      const payload: any[] = (res?.data?.data ?? res?.data ?? []) as any[];
+      // Normaliza o campo "type" para 'receita' | 'despesa'
+      const normalized = payload.map((c: any) => {
+        const t = String(c.type || '').toLowerCase();
+        let type: 'receita' | 'despesa' = 'despesa';
+        if (t === 'receita' || t === 'income') type = 'receita';
+        else if (t === 'despesa' || t === 'expense') type = 'despesa';
+        else if (t === 'rece' || t.includes('rece')) type = 'receita'; // fallback defensivo
+        return { ...c, type } as Category;
+      });
+      setItems(normalized);
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
     }

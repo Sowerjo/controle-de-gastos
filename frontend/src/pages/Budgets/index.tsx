@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import api from '../../services/api';
 import { fmtCurrency } from '../../utils/format';
+import CurrencyInput, { parseBRNumber, fmtNumberBR, formatBRInput } from '../../components/CurrencyInput';
 import { useMonth } from '../../contexts/MonthContext';
 import MonthSelector from '../../components/MonthSelector';
 import ModernLayout, { ModernCard, ModernButton } from '../../components/Layout/ModernLayout';
@@ -47,7 +48,7 @@ export default function Budgets() {
     e.preventDefault(); 
     if(!categoryId) return; 
     try {
-      await api.post('/api/v1/budgets', { categoryId, month: month+'-01', amount: Number(amount||0) }); 
+      await api.post('/api/v1/budgets', { categoryId, month: month+'-01', amount: parseBRNumber(String(amount||'')) }); 
       setCategoryId(''); 
       setAmount(''); 
       await load(); 
@@ -122,10 +123,10 @@ export default function Budgets() {
           
           <div className="flex-1">
             <label className="block text-sm font-medium text-white/70 mb-2">Valor Orçado</label>
-            <input 
+            <CurrencyInput 
               inputMode="decimal" 
               value={amount} 
-              onChange={(e) => setAmount(e.target.value)} 
+              onChange={setAmount} 
               placeholder="R$ 0,00" 
               className="w-full px-3 py-2 bg-white/5 border border-white/20 rounded-lg text-white placeholder-white/50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent tnum" 
             />
@@ -239,18 +240,18 @@ export default function Budgets() {
 
 function InlineMoney({ value, onChange }: { value: number; onChange: (v: number) => void }){
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(String(value));
-  useEffect(() => setVal(String(value)), [value]);
+  const [val, setVal] = useState(fmtNumberBR(Number(value||0)));
+  useEffect(() => setVal(fmtNumberBR(Number(value||0))), [value]);
   return editing ? (
     <span className="flex items-center gap-1">
       <input 
         className="px-2 py-1 bg-white/10 border border-white/20 rounded text-white tnum w-24 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" 
         value={val} 
-        onChange={(e)=>setVal(e.target.value)} 
-        onBlur={()=>{ setEditing(false); onChange(Number(val||0)); }} 
+        onChange={(e)=>setVal(formatBRInput(e.target.value))} 
+        onBlur={()=>{ setEditing(false); onChange(parseBRNumber(val)); }} 
         onKeyDown={(e)=>{ 
-          if(e.key==='Enter'){ setEditing(false); onChange(Number(val||0)); } 
-          if(e.key==='Escape'){ setEditing(false); setVal(String(value)); } 
+          if(e.key==='Enter'){ setEditing(false); onChange(parseBRNumber(val)); } 
+          if(e.key==='Escape'){ setEditing(false); setVal(fmtNumberBR(Number(value||0))); } 
         }} 
         autoFocus 
       />

@@ -2,6 +2,7 @@ import React from 'react';
 import api from '../services/api';
 import TagsInput from './TagsInput';
 import { notifyAccountsUpdate } from '../hooks/useAccounts';
+import CurrencyInput, { parseBRNumber } from './CurrencyInput';
 
 type Payee = { id: number; name: string };
 type Split = { amount: string; description: string; categoryId?: number | ''; payeeId?: number | '' };
@@ -58,17 +59,7 @@ export default function NewTransactionModal({ onCreated }: { onCreated?: () => v
     const newErrors: any = {};
     if (!accountId) newErrors.accountId = 'Selecione uma conta';
     if (!amount) newErrors.amount = 'Informe um valor';
-    const numericAmount = (() => {
-      const s = String(amount ?? '').trim();
-      if (!s) return NaN;
-      if (s.includes(',')) {
-        const cleaned = s.replace(/\./g, '').replace(',', '.');
-        const n = Number(cleaned);
-        return isNaN(n) ? NaN : n;
-      }
-      const n = Number(s);
-      return isNaN(n) ? NaN : n;
-    })();
+    const numericAmount = parseBRNumber(String(amount ?? ''));
     if (type === 'transfer') {
       if (!toAccountId) newErrors.toAccountId = 'Selecione a conta de destino';
     }
@@ -93,7 +84,7 @@ export default function NewTransactionModal({ onCreated }: { onCreated?: () => v
         if (payeeName) payload.payeeName = payeeName;
         if (categoryId) payload.categoryId = categoryId;
         if (tagChips.length) payload.tagNames = tagChips.map(t => t.name);
-        if (useSplit && splits.length) payload.splits = splits.filter(s => s.amount).map(s => ({ amount: Number(s.amount), description: s.description, categoryId: s.categoryId || null, payeeId: s.payeeId || null }));
+        if (useSplit && splits.length) payload.splits = splits.filter(s => s.amount).map(s => ({ amount: parseBRNumber(String(s.amount)), description: s.description, categoryId: s.categoryId || null, payeeId: s.payeeId || null }));
         await api.post('/api/v1/transactions', payload);
       }
     } catch (err) {
@@ -126,7 +117,7 @@ export default function NewTransactionModal({ onCreated }: { onCreated?: () => v
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-[color:var(--text-dim)] mb-1 block">Valor da transação</label>
-                <input aria-label="Valor da transação" autoFocus inputMode="decimal" className="input px-3 py-3 text-xl tnum w-full" placeholder="Ex.: 250,00" value={amount} onChange={(e) => setAmount(e.target.value)} />
+                <CurrencyInput aria-label="Valor da transação" autoFocus inputMode="decimal" className="input px-3 py-3 text-xl tnum w-full" placeholder="Ex.: 250,00" value={amount} onChange={setAmount} />
                 <div className="text-[11px] text-[color:var(--text-dim)] mt-1">Informe o valor em BRL (use vírgula para centavos).</div>
                 {errors.amount && (<div className="text-xs text-red-400 mt-1">{errors.amount}</div>)}
               </div>
@@ -229,7 +220,7 @@ export default function NewTransactionModal({ onCreated }: { onCreated?: () => v
                       <tbody>
                         {splits.map((s, idx) => (
                           <tr key={idx} className="border-t border-white/5">
-                            <td className="p-1"><input className="input px-2 py-1 w-28 tnum" value={s.amount} onChange={(e) => updateSplit(idx, { amount: e.target.value })} /></td>
+                            <td className="p-1"><CurrencyInput inputMode="decimal" className="input px-2 py-1 w-28 tnum" value={s.amount} onChange={(v) => updateSplit(idx, { amount: v })} /></td>
                             <td className="p-1"><input className="input px-2 py-1 w-full" value={s.description} onChange={(e) => updateSplit(idx, { description: e.target.value })} /></td>
                             <td className="p-1">
                               <select className="input px-2 py-1" value={s.categoryId || ''} onChange={(e) => updateSplit(idx, { categoryId: e.target.value? Number(e.target.value): '' })}>

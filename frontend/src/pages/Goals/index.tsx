@@ -12,6 +12,7 @@ import {
   ArchiveIcon,
   LoadingIcon
 } from '../../components/Icons';
+import CurrencyInput, { fmtNumberBR, parseBRNumber } from '../../components/CurrencyInput';
 
 type Goal = {
   id: number;
@@ -104,6 +105,16 @@ export default function Goals() {
           const pct = Math.min(100, Math.max(0, Math.round(g.percent || 0)));
           const done = (g.current_amount || g.accumulated || 0) >= (g.target_amount || 0);
           const isDebt = g.type === 'quitar_divida';
+          const current = Number(g.current_amount || g.accumulated || 0);
+          const target = Number(g.target_amount || 0);
+          const remaining = Math.max(0, target - current);
+          const monthsLeft = typeof g.months_left === 'number' ? g.months_left : (g.target_date ? (() => {
+            const now = new Date();
+            const t = new Date(g.target_date as string);
+            const diff = (t.getFullYear() - now.getFullYear()) * 12 + (t.getMonth() - now.getMonth());
+            return diff > 0 ? diff : 0;
+          })() : 0);
+          const suggested = monthsLeft > 0 && remaining > 0 ? (remaining / monthsLeft) : null;
           
           return (
             <ModernCard key={g.id} className={`${done ? 'border-green-500/30 bg-green-500/5' : ''}`}>
@@ -176,9 +187,29 @@ export default function Goals() {
                     </p>
                   </div>
                 )}
+
+                {/* Sugestão de aporte mensal baseada nos meses restantes e no quanto já foi aportado */}
+                {!done && suggested!=null && suggested>0 && (
+                  <div className="p-2 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <p className="text-xs text-white/70">Sugestão de aporte mensal</p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-white">{fmtCurrency(suggested)}</p>
+                      <p className="text-xs text-white/50">{monthsLeft} {monthsLeft===1? 'mês restante' : 'meses restantes'}</p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
+                {!done && (
+                  <ModernButton
+                    onClick={() => setShowContrib(g)}
+                    size="sm"
+                    className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
+                  >
+                    Aportar
+                  </ModernButton>
+                )}
                 <ModernButton
                   onClick={() => openEdit(g)}
                   size="sm"
@@ -516,6 +547,18 @@ function ContributeModal({ goal, onClose, onSaved }: { goal: Goal; onClose: () =
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Sugestão de aporte com base na meta e meses restantes
+  const current = Number(goal.current_amount || goal.accumulated || 0);
+  const target = Number(goal.target_amount || 0);
+  const remaining = Math.max(0, target - current);
+  const monthsLeft = typeof goal.months_left === 'number' ? goal.months_left : (goal.target_date ? (() => {
+    const now = new Date();
+    const t = new Date(goal.target_date as string);
+    const diff = (t.getFullYear() - now.getFullYear()) * 12 + (t.getMonth() - now.getMonth());
+    return diff > 0 ? diff : 0;
+  })() : 0);
+  const suggested = monthsLeft > 0 && remaining > 0 ? (remaining / monthsLeft) : 0;
+
   useEffect(() => {
     (async () => {
       try {
@@ -533,11 +576,13 @@ function ContributeModal({ goal, onClose, onSaved }: { goal: Goal; onClose: () =
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setSaving(true); setError(null);
-    const payload: any = { id: goal.id, amount: Number(amount||0), date };
+    // Converte entrada brasileira (ex.: "1.234,56" ou "20") para número em BRL usando util compartilhado
+    const parsedAmount = parseBRNumber(amount);
+    const payload: any = { id: goal.id, amount: parsedAmount, date };
     if (accountId) payload.account_id = accountId;
     if (categoryId) payload.category_id = categoryId;
     if (sourceAccountId) payload.source_account_id = sourceAccountId;
-    if (!payload.amount) { setError('Informe um valor para o aporte'); setSaving(false); return; }
+    if (!payload.amount || payload.amount <= 0) { setError('Informe um valor positivo para o aporte'); setSaving(false); return; }
     if (!accountId && !goal.account_id) { setError('Selecione uma conta destino para o aporte'); setSaving(false); return; }
     if (!sourceAccountId) { setError('Selecione uma conta origem para o aporte'); setSaving(false); return; }
     if (sourceAccountId === accountId) { setError('A conta origem deve ser diferente da conta destino'); setSaving(false); return; }
@@ -562,9 +607,20 @@ function ContributeModal({ goal, onClose, onSaved }: { goal: Goal; onClose: () =
           <button className="text-sm text-[color:var(--text-dim)] hover:text-[color:var(--text)]" onClick={onClose}>Fechar</button>
         </div>
         {error && <div className="mb-2 text-sm text-rose-300">{error}</div>}
+        {suggested>0 && (
+          <div className="mb-3 p-2 bg-green-500/10 border border-green-500/20 rounded-lg flex items-center justify-between">
+            <div>
+              <p className="text-xs text-white/70">Sugestão de aporte mensal</p>
+              <p className="text-sm font-semibold text-white">{fmtCurrency(suggested)} <span className="text-xs text-white/50">({monthsLeft} {monthsLeft===1? 'mês' : 'meses'} restantes)</span></p>
+            </div>
+            <button type="button" className="px-3 py-2 rounded bg-green-600 hover:bg-green-700 text-white text-sm" onClick={()=>setAmount(fmtNumberBR(suggested))}>
+              Usar sugestão
+            </button>
+          </div>
+        )}
         <form onSubmit={submit} className="space-y-3">
           <div className="grid sm:grid-cols-2 gap-3 items-center">
-            <input inputMode="decimal" className="input px-2 py-2 tnum" placeholder="Valor do aporte" value={amount} onChange={(e)=>setAmount(e.target.value)} />
+            <CurrencyInput inputMode="decimal" className="input px-2 py-2 tnum" placeholder="Valor do aporte" value={amount} onChange={setAmount} />
             <input type="date" className="input px-2 py-2" value={date} onChange={(e)=>setDate(e.target.value)} />
           </div>
           <div className="space-y-3">

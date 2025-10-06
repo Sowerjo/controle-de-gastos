@@ -266,6 +266,9 @@ export default function Transactions() {
     .reduce((sum, t) => sum + toNumberBR((t as any).valor ?? (t as any).amount ?? 0), 0);
   // Alguns backends/importações podem fornecer valores em centavos (ex.: 114550 para 1.145,50)
   // Detecta esse caso e ajusta a escala para exibição correta.
+  // TEMPORARIAMENTE DESABILITADO PARA DEBUG
+  const needsCentScale = false;
+  /*
   const needsCentScale = (() => {
     const values = items
       .filter(t => t.tipo === 'receita' || t.tipo === 'despesa')
@@ -275,10 +278,12 @@ export default function Transactions() {
     // Heurística: muitos valores inteiros altos cuja última parte não é múltipla de 100
     return values.some(v => Number.isInteger(v) && Math.abs(v) >= 1000 && Math.abs(v) % 100 !== 0);
   })();
+  */
 
   const totalReceitasDisplay = needsCentScale ? totalReceitas / 100 : totalReceitas;
   const totalDespesasDisplay = needsCentScale ? totalDespesas / 100 : totalDespesas;
-  const saldo = toNumberBR(totalReceitasDisplay) - toNumberBR(totalDespesasDisplay);
+  // Saldo calculado diretamente com números já normalizados para evitar erros de casas decimais
+  const saldo = totalReceitasDisplay - totalDespesasDisplay;
 
   return (
     <ModernLayout 
@@ -406,7 +411,14 @@ export default function Transactions() {
 
       {/* Lista de transações */}
       <div className="space-y-3">
-        {items.map((t) => (
+        {items.map((t) => {
+          // Normaliza o valor da transação para exibição correta com casas decimais
+          const rawVal = (t as any).valor ?? (t as any).amount ?? 0;
+          const parsedVal = typeof rawVal === 'number' ? (isNaN(rawVal) ? 0 : rawVal) : toNumberBR(rawVal);
+          // TEMPORARIAMENTE DESABILITADO PARA DEBUG
+          const displayVal = parsedVal;
+          // const displayVal = needsCentScale && Number.isInteger(parsedVal) ? parsedVal / 100 : parsedVal;
+          return (
           <ModernCard key={t.id} className="p-4 hover:bg-white/5 transition-all duration-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -451,7 +463,7 @@ export default function Transactions() {
                 <div className={`text-lg font-bold tnum ${
                   t.tipo === 'despesa' ? 'text-red-400' : 'text-green-400'
                 }`}>
-                  {t.tipo === 'despesa' ? '-' : '+'}{fmtCurrency(Number(t.valor||0))}
+                  {t.tipo === 'despesa' ? '-' : '+'}{fmtCurrency(displayVal)}
                 </div>
                 
                 <div className="flex gap-2">
@@ -475,7 +487,7 @@ export default function Transactions() {
               </div>
             </div>
           </ModernCard>
-        ))}
+        )})}
         
         {!items.length && !loading && (
           <ModernCard className="p-8 text-center">
